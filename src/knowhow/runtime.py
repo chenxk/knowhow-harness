@@ -16,7 +16,7 @@ from knowhow.rag.ingest import ingest_dir
 from knowhow.rag.store import InMemoryStore
 from knowhow.respond import ModelResponder, OfflineResponder
 from knowhow.tools.catalog import McpToolCatalog, StaticToolCatalog, ToolCatalog
-from knowhow.types import RunResult, message_text
+from knowhow.types import ChatMessage, RunResult, message_text
 
 
 class _MermaidGraph(Protocol):
@@ -24,11 +24,20 @@ class _MermaidGraph(Protocol):
         """Return a mermaid diagram of the compiled graph."""
 
 
+class _Snapshot(Protocol):
+    @property
+    def values(self) -> object:
+        """Checkpoint values for one thread."""
+
+
 class AgentGraph(Protocol):
     """Compiled LangGraph surface this runtime calls."""
 
     async def ainvoke(self, state: GraphState, config: dict[str, object]) -> GraphState:
         """Run the graph once."""
+
+    async def aget_state(self, config: dict[str, object]) -> _Snapshot:
+        """Read the latest checkpoint for a thread."""
 
     def get_graph(self) -> _MermaidGraph:
         """Return the drawable graph."""
@@ -72,6 +81,24 @@ class Runtime:
             tool_name=result["tool_name"],
             trace_id=self.tracer.trace_id(callbacks),
         )
+
+    async def transcript(self, thread_id: str) -> list[ChatMessage]:
+        """Return user and assistant messages stored on a checkpoint thread."""
+        snapshot = await self.graph.aget_state({"configurable": {"thread_id": thread_id}})
+        values = snapshot.values
+        if not isinstance(values, dict):
+            return []
+        raw = values.get("messages") or []
+        messages: list[ChatMessage] = []
+        for message in raw:
+            if isinstance(message, HumanMessage):
+                role = "user"
+            elif isinstance(message, AIMessage):
+                role = "assistant"
+            else:
+                continue
+            messages.append(ChatMessage(role=role, content=message_text(message.content)))
+        return messages
 
 
 async def build_runtime(settings: Settings | None = None) -> Runtime:

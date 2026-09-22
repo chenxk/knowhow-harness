@@ -18,6 +18,13 @@ class Decision(BaseModel):
     tool_args: dict[str, str] = Field(default_factory=dict)
 
 
+class ChatMessage(BaseModel):
+    """One user or assistant turn stored on a thread."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class RunResult(BaseModel):
     """One graph invocation, including the fields eval checks."""
 

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knowhow 测试台</title>
+  <style>
+    :root {
+      --paper: #f3ecdf;
+      --panel: #faf6ee;
+      --ink: #241c15;
+      --muted: #6f6458;
+      --line: #e2d5c3;
+      --margin: #b5523a;
+      --retrieve: #1f6b4a;
+      --tool: #9a3412;
+      --answer: #243e66;
+      --shadow: 0 16px 40px rgba(36, 28, 21, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, transparent 47px, rgba(181, 82, 58, 0.35) 47px, rgba(181, 82, 58, 0.35) 48px, transparent 48px),
+        repeating-linear-gradient(var(--paper), var(--paper) 31px, rgba(36, 28, 21, 0.04) 32px);
+      font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+    }
+
+    header, main, aside { position: relative; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-end;
+      padding: 28px 32px 18px 64px;
+    }
+
+    .brand {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .mark {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 1.5px solid var(--ink);
+      border-radius: 4px;
+      font-family: Palatino, "Palatino Linotype", "Iowan Old Style", serif;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Palatino, "Palatino Linotype", "Iowan Old Style", serif;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    .sub {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .fact {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 18px;
+      padding: 0 32px 28px 64px;
+      min-height: calc(100vh - 120px);
+    }
+
+    aside, .desk {
+      background: rgba(250, 246, 238, 0.92);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    aside { padding: 18px; }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    input, textarea, button { font: inherit; color: inherit; }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: white;
+      padding: 10px 12px;
+    }
+
+    textarea {
+      min-height: 74px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    button, .chip {
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+      padding: 9px 12px;
+      cursor: pointer;
+    }
+
+    button.secondary, .chip {
+      background: transparent;
+      color: var(--ink);
+    }
+
+    button:disabled { opacity: 0.45; cursor: wait; }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .row button { flex: 1; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+    .chip { padding: 6px 8px; font-size: 13px; }
+
+    #eval {
+      margin-top: 18px;
+      display: grid;
+      gap: 6px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+    }
+
+    .pass { color: var(--retrieve); }
+    .fail { color: var(--margin); }
+
+    .desk {
+      display: flex;
+      flex-direction: column;
+      min-height: 640px;
+    }
+
+    #transcript {
+      flex: 1;
+      width: min(760px, 100%);
+      padding: 22px 22px 8px;
+      overflow: auto;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 48px 8px;
+      font-family: Palatino, "Palatino Linotype", serif;
+      font-size: 22px;
+    }
+
+    .turn { margin: 0 0 18px; }
+
+    .who {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+    }
+
+    .bubble {
+      padding: 12px 14px;
+      background: white;
+      border: 1px solid var(--line);
+      white-space: pre-wrap;
+      line-height: 1.55;
+    }
+
+    .turn.user .bubble { background: #fffaf2; }
+
+    .stamp {
+      display: block;
+      width: fit-content;
+      margin-bottom: 8px;
+      padding: 2px 8px;
+      border: 1.5px solid currentColor;
+      font-family: Palatino, "Palatino Linotype", serif;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .stamp.retrieve { color: var(--retrieve); }
+    .stamp.tool { color: var(--tool); }
+    .stamp.answer { color: var(--answer); }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+    }
+
+    form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    #error {
+      display: none;
+      margin: 0 14px;
+      color: var(--margin);
+      font-size: 14px;
+    }
+
+    @media (max-width: 860px) {
+      header, .layout { padding-left: 20px; padding-right: 20px; }
+      .layout { grid-template-columns: 1fr; }
+      body { background: var(--paper); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="mark">KH</div>
+      <div>
+        <h1>测试台</h1>
+        <p class="sub">同一线程里看路由、来源和工具结果</p>
+      </div>
+    </div>
+    <div class="facts" id="facts"></div>
+  </header>
+  <div class="layout">
+    <aside>
+      <label for="thread">线程</label>
+      <input id="thread" value="web" autocomplete="off" />
+      <div class="row">
+        <button type="button" class="secondary" id="new-thread">新线程</button>
+        <button type="button" class="secondary" id="run-eval">跑黄金集</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div id="eval"></div>
+    </aside>
+    <section class="desk">
+      <div id="transcript"><p class="empty">写下一个问题。线程会记住这一轮。</p></div>
+      <p id="error"></p>
+      <form id="composer">
+        <textarea id="question" placeholder="例如：如何重置密码"></textarea>
+        <button type="submit" id="send">发送</button>
+      </form>
+    </section>
+  </div>
+  <script>
+    const actionLabel = { retrieve: "检索", tool: "工具", answer: "直接回答" };
+    const samples = ["如何重置密码", "lookup_note 重置密码", "你好"];
+    const transcript = document.querySelector("#transcript");
+    const error = document.querySelector("#error");
+    const question = document.querySelector("#question");
+    const thread = document.querySelector("#thread");
+    const send = document.querySelector("#send");
+    let log = [];
+
+    samples.forEach((text) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "chip";
+      button.textContent = text;
+      button.addEventListener("click", () => ask(text));
+      document.querySelector("#chips").append(button);
+    });
+
+    document.querySelector("#new-thread").addEventListener("click", () => {
+      thread.value = "web-" + Math.random().toString(36).slice(2, 6);
+      log = [];
+      render();
+      document.querySelector("#eval").replaceChildren();
+      showError("");
+    });
+
+    document.querySelector("#run-eval").addEventListener("click", async () => {
+      showError("");
+      const box = document.querySelector("#eval");
+      box.textContent = "评测进行中";
+      const response = await fetch("/api/eval", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        showError(detail(data));
+        box.replaceChildren();
+        return;
+      }
+      box.replaceChildren();
+      const summary = document.createElement("div");
+      summary.textContent = data.passed + " 通过，" + data.failed + " 失败";
+      box.append(summary);
+      data.rows.forEach((row) => {
+        const line = document.createElement("div");
+        line.className = row.passed ? "pass" : "fail";
+        const note = row.failures.length ? " " + row.failures.join(", ") : "";
+        line.textContent = (row.passed ? "pass " : "fail ") + row.case_id + " " + row.action + note;
+        box.append(line);
+      });
+    });
+
+    document.querySelector("#composer").addEventListener("submit", (event) => {
+      event.preventDefault();
+      ask(question.value);
+    });
+
+    question.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        ask(question.value);
+      }
+    });
+
+    loadMeta();
+
+    async function loadMeta() {
+      const response = await fetch("/api/meta");
+      const data = await response.json();
+      const facts = document.querySelector("#facts");
+      ["mode " + data.mode, "chunks " + data.corpus_chunks, "tools " + data.tools.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
+        const item = document.createElement("span");
+        item.className = "fact";
+        item.textContent = text;
+        facts.append(item);
+      });
+    }
+
+    async function ask(text) {
+      const content = text.trim();
+      if (!content) {
+        showError("问题不能为空");
+        return;
+      }
+      showError("");
+      send.disabled = true;
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: content, thread_id: thread.value.trim() || "web" }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          showError(detail(data));
+          return;
+        }
+        question.value = "";
+        log.push({ role: "user", content });
+        log.push({
+          role: "assistant",
+          content: data.answer,
+          action: data.action,
+          sources: data.sources,
+          tool_name: data.tool_name,
+          trace_id: data.trace_id,
+        });
+        render();
+      } catch (err) {
+        showError("请求失败");
+      } finally {
+        send.disabled = false;
+        question.focus();
+      }
+    }
+
+    function render() {
+      transcript.replaceChildren();
+      if (!log.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "写下一个问题。线程会记住这一轮。";
+        transcript.append(empty);
+        return;
+      }
+      log.forEach((message) => {
+        const turn = document.createElement("article");
+        turn.className = "turn " + (message.role === "user" ? "user" : "assistant");
+        const who = document.createElement("div");
+        who.className = "who";
+        who.textContent = message.role === "user" ? "提问" : "回答";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        if (message.role === "assistant") {
+          const stamp = document.createElement("div");
+          stamp.className = "stamp " + message.action;
+          stamp.textContent = actionLabel[message.action] || message.action;
+          const body = document.createElement("div");
+          body.textContent = message.content;
+          bubble.append(stamp, body);
+        } else {
+          bubble.textContent = message.content;
+        }
+        turn.append(who, bubble);
+        const bits = [];
+        if (message.sources && message.sources.length) bits.push("sources " + message.sources.join(", "));
+        if (message.tool_name) bits.push("tool " + message.tool_name);
+        if (message.trace_id) bits.push("trace " + message.trace_id);
+        if (bits.length) {
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = bits.join("  ·  ");
+          turn.append(meta);
+        }
+        transcript.append(turn);
+      });
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function showError(text) {
+      error.style.display = text ? "block" : "none";
+      error.textContent = text;
+    }
+
+    function detail(data) {
+      if (!data || !data.detail) return "请求失败";
+      return typeof data.detail === "string" ? data.detail : "请求没有通过校验";
+    }
+  </script>
+</body>
+</html>

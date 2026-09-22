@@ -26,7 +26,14 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("eval", help="跑 evals/golden.yaml")
     sub.add_parser("graph", help="打印 LangGraph mermaid")
 
+    serve_parser = sub.add_parser("serve", help="启动测试台")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8765)
+
     args = parser.parse_args(argv)
+    if args.command == "serve":
+        _serve(args.host, args.port)
+        return
     try:
         asyncio.run(_dispatch(args))
     except RuntimeError as exc:
@@ -74,3 +81,11 @@ async def _dispatch(args: argparse.Namespace) -> None:
             raise SystemExit(1)
         return
     raise RuntimeError(f"unknown command: {args.command}")
+
+
+def _serve(host: str, port: int) -> None:
+    import uvicorn
+
+    from knowhow.web.app import create_app
+
+    uvicorn.run(create_app(), host=host, port=port)

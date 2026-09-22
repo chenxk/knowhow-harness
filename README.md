@@ -21,12 +21,13 @@ data/corpus/     离线资料
 evals/golden.yaml
 ```
 
-从仓库根目录执行命令。
+从仓库根目录执行命令。`knowhow serve` 在 `http://127.0.0.1:8765` 打开测试台，同一线程的多轮对话留在这个进程里。
 
 ## 命令
 
 ```bash
 uv sync --group dev
+uv run knowhow serve
 uv run knowhow run "如何重置密码"
 uv run knowhow eval
 uv run knowhow graph
