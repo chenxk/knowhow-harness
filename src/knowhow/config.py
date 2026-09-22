@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     mcp_enabled: bool = False
     mcp_config: Path = Path("config/mcp.yaml")
     corpus_dir: Path = Path("data/corpus")
+    skills_dir: Path = Path("skills")
     golden_path: Path = Path("evals/golden.yaml")
     top_k: int = 4
     retrieve_threshold: float = 0.12
@@ -71,6 +72,10 @@ class Settings(BaseSettings):
         return _resolve(self.corpus_dir)
 
     @property
+    def skills_path(self) -> Path:
+        return _resolve(self.skills_dir)
+
+    @property
     def mcp_path(self) -> Path:
         return _resolve(self.mcp_config)
 
@@ -86,6 +91,8 @@ class Settings(BaseSettings):
             raise RuntimeError(f"MCP config not found: {self.mcp_path}")
         if not self.corpus_path.is_dir():
             raise RuntimeError(f"corpus dir not found: {self.corpus_path}")
+        if not self.skills_path.is_dir():
+            raise RuntimeError(f"skills dir not found: {self.skills_path}")
         if not self.golden_file.is_file():
             raise RuntimeError(f"golden file not found: {self.golden_file}")
 

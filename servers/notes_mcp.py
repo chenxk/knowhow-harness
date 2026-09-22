@@ -25,5 +25,14 @@ def lookup_note(topic: str) -> str:
     return "no note for that topic"
 
 
+@mcp.tool()
+def current_time() -> str:
+    """Return the current local time with a numeric UTC offset."""
+    from datetime import datetime
+
+    clock = datetime.now().astimezone().isoformat(timespec="seconds")
+    return f"当前时间：{clock}"
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

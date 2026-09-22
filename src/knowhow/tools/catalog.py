@@ -9,6 +9,8 @@ import yaml
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
+from knowhow.tools.clock import current_time_text
+
 
 class ToolCatalog(Protocol):
     """Named tools the router may select."""
@@ -30,13 +32,17 @@ class StaticToolCatalog:
         return None
 
     def names(self) -> list[str]:
-        return ["lookup_note"]
+        return ["current_time", "lookup_note"]
 
     async def ainvoke(self, name: str, args: dict[str, str]) -> str:
-        if name != "lookup_note":
-            raise KeyError(name)
-        topic = args.get("topic", "")
-        return f"lookup_note result for {topic}: check the oncall note, then the Langfuse trace."
+        if name == "current_time":
+            return current_time_text()
+        if name == "lookup_note":
+            topic = args.get("topic", "")
+            return (
+                f"lookup_note result for {topic}: check the oncall note, then the Langfuse trace."
+            )
+        raise KeyError(name)
 
 
 def load_mcp_servers(path: Path) -> dict[str, dict[str, object]]:

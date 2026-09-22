@@ -16,6 +16,7 @@ class Decision(BaseModel):
     query: str = ""
     tool_name: str = ""
     tool_args: dict[str, str] = Field(default_factory=dict)
+    guidance: str = ""
 
 
 class ChatMessage(BaseModel):

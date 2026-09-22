@@ -33,6 +33,7 @@ def build_graph(
             "query": decision.query or question,
             "tool_name": decision.tool_name,
             "tool_args": decision.tool_args,
+            "guidance": decision.guidance,
         }
 
     async def retrieve(state: GraphState) -> dict[str, object]:
@@ -61,6 +62,7 @@ def build_graph(
             context=state["context"],
             sources=state["sources"],
             tool_output=state["tool_output"],
+            guidance=state["guidance"],
         ):
             parts.append(delta)
             writer({"text": delta})

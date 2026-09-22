@@ -28,6 +28,7 @@ def test_meta_reports_offline_runtime(client: TestClient) -> None:
     assert body["mode"] == "offline"
     assert body["corpus_chunks"] >= 2
     assert "lookup_note" in body["tools"]
+    assert body["skills"] == ["current-time"]
     assert body["tracing"] is False
 
 
@@ -72,4 +73,4 @@ def test_blank_question_is_rejected(client: TestClient) -> None:
 def test_eval_endpoint_passes_golden_set(client: TestClient) -> None:
     body = client.post("/api/eval").json()
     assert body["failed"] == 0
-    assert body["passed"] == 3
+    assert body["passed"] == 4

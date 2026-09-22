@@ -289,7 +289,7 @@
   </div>
   <script>
     const actionLabel = { retrieve: "检索", tool: "工具", answer: "直接回答" };
-    const samples = ["如何重置密码", "lookup_note 重置密码", "你好"];
+    const samples = ["如何重置密码", "lookup_note 重置密码", "现在几点", "你好"];
     const transcript = document.querySelector("#transcript");
     const error = document.querySelector("#error");
     const question = document.querySelector("#question");
@@ -356,7 +356,7 @@
       const response = await fetch("/api/meta");
       const data = await response.json();
       const facts = document.querySelector("#facts");
-      ["mode " + data.mode, "chunks " + data.corpus_chunks, "tools " + data.tools.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
+      ["mode " + data.mode, "chunks " + data.corpus_chunks, "tools " + data.tools.join(","), "skills " + data.skills.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
         const item = document.createElement("span");
         item.className = "fact";
         item.textContent = text;

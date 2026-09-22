@@ -14,6 +14,7 @@ src/knowhow/
   respond.py     模板回答 / 模型回答
   rag/           markdown 入库与检索
   tools/         静态工具目录，或 MultiServerMCPClient
+  skills.py      读取 skills/*/SKILL.md
   evals/         golden.yaml 打分，可选写回 Langfuse
   observe/       Langfuse callback
 servers/notes_mcp.py

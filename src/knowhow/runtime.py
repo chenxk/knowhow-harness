@@ -16,6 +16,7 @@ from knowhow.policy import ModelDecider, ScriptedDecider
 from knowhow.rag.ingest import ingest_dir
 from knowhow.rag.store import InMemoryStore
 from knowhow.respond import ModelResponder, OfflineResponder
+from knowhow.skills import load_skills
 from knowhow.tools.catalog import McpToolCatalog, StaticToolCatalog, ToolCatalog
 from knowhow.types import Action, ChatMessage, RunResult, StreamEvent, message_text
 
@@ -64,6 +65,7 @@ class Runtime:
         store: InMemoryStore,
         tracer: Tracer,
         catalog: ToolCatalog,
+        skill_names: list[str],
         corpus_chunks: int,
     ) -> None:
         self.settings = settings
@@ -71,6 +73,7 @@ class Runtime:
         self.store = store
         self.tracer = tracer
         self.catalog = catalog
+        self.skill_names = skill_names
         self.corpus_chunks = corpus_chunks
 
     async def run(self, question: str, *, thread_id: str) -> RunResult:
@@ -160,6 +163,11 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
     else:
         catalog = StaticToolCatalog()
     await catalog.setup()
+    skills = load_skills(resolved.skills_path)
+    missing = [skill.tool for skill in skills if skill.tool not in catalog.names()]
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(f"skills reference unknown tools: {joined}")
     if resolved.mode == "live":
         chat = ChatOpenAI(
             model=resolved.chat_model,
@@ -168,10 +176,15 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
             temperature=0,
             streaming=True,
         )
-        decider = ModelDecider(chat, catalog)
+        decider = ModelDecider(chat, catalog, skills)
         responder = ModelResponder(chat)
     else:
-        decider = ScriptedDecider(store, catalog, threshold=resolved.retrieve_threshold)
+        decider = ScriptedDecider(
+            store,
+            catalog,
+            skills,
+            threshold=resolved.retrieve_threshold,
+        )
         responder = OfflineResponder()
     graph = build_graph(
         decider=decider,
@@ -186,6 +199,7 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
         store=store,
         tracer=Tracer(resolved),
         catalog=catalog,
+        skill_names=[skill.name for skill in skills],
         corpus_chunks=corpus_chunks,
     )
 
@@ -243,6 +257,7 @@ def _initial_state(question: str) -> GraphState:
         "tool_name": "",
         "tool_args": {},
         "tool_output": "",
+        "guidance": "",
     }
 
 

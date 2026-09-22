@@ -36,7 +36,7 @@ def test_parse_decision_rejects_unknown_tool() -> None:
 
 @pytest.mark.asyncio
 async def test_model_decider_falls_back_when_json_is_invalid() -> None:
-    decider = ModelDecider(_FakeChat("not-json"), StaticToolCatalog())
+    decider = ModelDecider(_FakeChat("not-json"), StaticToolCatalog(), [])
     decision = await decider.decide("如何重置密码")
     assert decision.action == "answer"
     assert decision.query == "如何重置密码"

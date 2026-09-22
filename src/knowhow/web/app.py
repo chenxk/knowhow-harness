@@ -30,6 +30,7 @@ class MetaOut(BaseModel):
     chat_model: str
     corpus_chunks: int
     tools: list[str]
+    skills: list[str]
     tracing: bool
 
 
@@ -69,6 +70,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             chat_model=current.settings.chat_model,
             corpus_chunks=current.corpus_chunks,
             tools=current.catalog.names(),
+            skills=current.skill_names,
             tracing=current.tracer.enabled,
         )
 

@@ -12,6 +12,7 @@ Knowhow Harness 是一个 Agent Runtime 演示骨架。命令从仓库根目录�
 | `respond.py` | 最终回答 |
 | `rag/` | 语料切块和 `VectorStore` |
 | `tools/` | `ToolCatalog`。默认静态目录；`KNOWHOW_MCP_ENABLED=true` 时改走 MCP |
+| `skills.py` | 读取仓库 `skills/*/SKILL.md`。选中后才把正文交给回答 |
 | `evals/` | 只消费 `Runtime.run` 的结果，不把规则写进图节点 |
 | `observe/` | Langfuse。两个密钥都缺省时不创建 client |
 | `web/` | 测试台。进程内复用一个 `Runtime`，页面只调 HTTP |

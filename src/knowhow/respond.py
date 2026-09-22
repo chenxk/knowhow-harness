@@ -26,6 +26,7 @@ class Responder(Protocol):
         context: list[str],
         sources: list[str],
         tool_output: str,
+        guidance: str,
     ) -> AsyncIterator[str]:
         """Yield answer text as it is produced."""
 
@@ -41,8 +42,9 @@ class OfflineResponder:
         context: list[str],
         sources: list[str],
         tool_output: str,
+        guidance: str,
     ) -> AsyncIterator[str]:
-        del question, query
+        del question, query, guidance
         if tool_output:
             text = tool_output
         elif context:
@@ -70,6 +72,7 @@ class ModelResponder:
         context: list[str],
         sources: list[str],
         tool_output: str,
+        guidance: str,
     ) -> AsyncIterator[str]:
         payload = {
             "question": question,
@@ -77,6 +80,7 @@ class ModelResponder:
             "context": context,
             "sources": sources,
             "tool_output": tool_output,
+            "guidance": guidance,
         }
         async for chunk in self._chat.astream(
             [

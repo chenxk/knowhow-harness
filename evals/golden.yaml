@@ -10,3 +10,7 @@ cases:
   - id: hello
     question: 你好
     expect_action: answer
+  - id: current-time
+    question: 现在几点
+    expect_action: tool
+    expect_tool: current_time
