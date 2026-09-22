@@ -12,6 +12,7 @@ from knowhow.types import message_text
 
 _ANSWER_SYSTEM = """用用户的语言回答。资料和工具结果里没有的事实不要编造。
 有来源时在末尾列出来源文件名。
+需要分点、标题、强调或代码时使用 Markdown，不要输出 HTML。
 """
 
 

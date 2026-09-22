@@ -93,6 +93,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 try:
                     async for event in current.stream(question, thread_id=body.thread_id):
                         yield _sse(event.model_dump(mode="json"))
+                        await asyncio.sleep(0)
                     current.tracer.flush()
                 except RuntimeError as exc:
                     yield _sse({"type": "error", "text": str(exc)})

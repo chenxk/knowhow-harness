@@ -20,9 +20,14 @@
 
     * { box-sizing: border-box; }
 
+    html, body { height: 100%; }
+
     body {
       margin: 0;
-      min-height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       color: var(--ink);
       background:
         linear-gradient(90deg, transparent 47px, rgba(181, 82, 58, 0.35) 47px, rgba(181, 82, 58, 0.35) 48px, transparent 48px),
@@ -33,11 +38,12 @@
     header, main, aside { position: relative; }
 
     header {
+      flex: none;
       display: flex;
       justify-content: space-between;
       gap: 24px;
       align-items: flex-end;
-      padding: 28px 32px 18px 64px;
+      padding: 16px 28px 12px 56px;
     }
 
     .brand {
@@ -62,7 +68,7 @@
     h1 {
       margin: 0;
       font-family: Palatino, "Palatino Linotype", "Iowan Old Style", serif;
-      font-size: 32px;
+      font-size: 26px;
       font-weight: 600;
       letter-spacing: -0.03em;
     }
@@ -89,11 +95,13 @@
     }
 
     .layout {
+      flex: 1;
+      min-height: 0;
       display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 18px;
-      padding: 0 32px 28px 64px;
-      min-height: calc(100vh - 120px);
+      grid-template-columns: 260px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: 16px;
+      padding: 0 28px 16px 56px;
     }
 
     aside, .desk {
@@ -102,7 +110,11 @@
       box-shadow: var(--shadow);
     }
 
-    aside { padding: 18px; }
+    aside {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
 
     label {
       display: block;
@@ -123,8 +135,9 @@
     }
 
     textarea {
-      min-height: 74px;
-      resize: vertical;
+      height: 56px;
+      max-height: 120px;
+      resize: none;
       line-height: 1.5;
     }
 
@@ -167,16 +180,19 @@
     .fail { color: var(--margin); }
 
     .desk {
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      min-height: 640px;
+      overflow: hidden;
     }
 
     #transcript {
       flex: 1;
-      width: min(760px, 100%);
-      padding: 22px 22px 8px;
-      overflow: auto;
+      min-height: 0;
+      padding: 20px 22px 8px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overflow-anchor: none;
     }
 
     .empty {
@@ -186,7 +202,9 @@
       font-size: 22px;
     }
 
-    .turn { margin: 0 0 18px; }
+    .turn { margin: 0 0 18px; width: 100%; max-width: 760px; }
+
+    .turn.user .bubble { background: #fffaf2; }
 
     .who {
       margin-bottom: 4px;
@@ -203,7 +221,61 @@
       line-height: 1.55;
     }
 
-    .turn.user .bubble { background: #fffaf2; }
+    .body {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .body > :first-child { margin-top: 0; }
+    .body > :last-child { margin-bottom: 0; }
+
+    .body p, .body ul, .body ol, .body blockquote, .body pre { margin: 0 0 0.7em; }
+
+    .body h1, .body h2, .body h3 {
+      margin: 0.2em 0 0.45em;
+      font-family: Palatino, "Palatino Linotype", serif;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .body h1 { font-size: 1.35em; }
+    .body h2 { font-size: 1.15em; }
+    .body h3 { font-size: 1.05em; }
+
+    .body ul, .body ol { padding-left: 1.3em; }
+
+    .body blockquote {
+      padding-left: 12px;
+      border-left: 3px solid var(--line);
+      color: var(--muted);
+    }
+
+    .body a { color: var(--answer); }
+
+    .body code {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.92em;
+      background: #f3ecdf;
+      padding: 0 4px;
+    }
+
+    .body pre {
+      padding: 10px 12px;
+      overflow: auto;
+      background: #f7f1e6;
+      border: 1px solid var(--line);
+    }
+
+    .body pre code { background: none; padding: 0; }
+
+    .body .lang {
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+    }
+
+    .stamp[hidden], .meta[hidden] { display: none; }
 
     .stamp {
       display: block;
@@ -223,8 +295,13 @@
 
     .turn.assistant.pending .body::after {
       content: "▍";
-      margin-left: 2px;
-      color: var(--muted);
+      margin-left: 1px;
+      color: var(--margin);
+      animation: caret 1s steps(1) infinite;
+    }
+
+    @keyframes caret {
+      50% { opacity: 0; }
     }
 
     .meta {
@@ -235,23 +312,32 @@
     }
 
     form {
+      flex: none;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 10px;
+      align-items: end;
       padding: 14px;
       border-top: 1px solid var(--line);
+      background: var(--panel);
     }
 
     #error {
       display: none;
-      margin: 0 14px;
+      flex: none;
+      margin: 0;
+      padding: 8px 14px 0;
       color: var(--margin);
       font-size: 14px;
     }
 
     @media (max-width: 860px) {
-      header, .layout { padding-left: 20px; padding-right: 20px; }
-      .layout { grid-template-columns: 1fr; }
+      header, .layout { padding-left: 16px; padding-right: 16px; }
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      aside { max-height: 32vh; }
       body { background: var(--paper); }
     }
   </style>
@@ -397,25 +483,6 @@
       }
     }
 
-    async function readStream(response) {
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const turn = assistantTurn();
-      while (true) {
-        const step = await reader.read();
-        if (step.done) break;
-        buffer += decoder.decode(step.value, { stream: true });
-        const blocks = buffer.split("\n\n");
-        buffer = blocks.pop() || "";
-        for (const block of blocks) {
-          const line = block.split("\n").find((item) => item.startsWith("data: "));
-          if (!line) continue;
-          applyEvent(turn, JSON.parse(line.slice(6)));
-        }
-      }
-    }
-
     function assistantTurn() {
       const last = log[log.length - 1];
       if (!last || last.role !== "assistant") {
@@ -432,11 +499,34 @@
       return log[log.length - 1];
     }
 
+    async function readStream(response) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const turn = assistantTurn();
+      while (true) {
+        const step = await reader.read();
+        if (step.done) break;
+        buffer += decoder.decode(step.value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          const line = block.split("\n").find((item) => item.startsWith("data: "));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6));
+          applyEvent(turn, event);
+          if (event.type === "delta") {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+          }
+        }
+      }
+    }
+
     function applyEvent(turn, event) {
       if (event.type === "error") {
         showError(event.text || "请求失败");
         turn.pending = false;
-        render();
+        paintAssistant(turn);
         return;
       }
       if (event.type === "status" || event.type === "done") {
@@ -448,19 +538,12 @@
           turn.trace_id = event.trace_id;
           if (event.answer) turn.content = event.answer;
         }
-        render();
+        paintAssistant(turn);
         return;
       }
       if (event.type === "delta") {
         turn.content += event.text || "";
-        const bodies = transcript.querySelectorAll(".turn.assistant .body");
-        const body = bodies[bodies.length - 1];
-        if (!body) {
-          render();
-          return;
-        }
-        body.textContent = turn.content;
-        transcript.scrollTop = transcript.scrollHeight;
+        paintAssistant(turn);
       }
     }
 
@@ -474,44 +557,188 @@
         return;
       }
       log.forEach((message) => {
-        const turn = document.createElement("article");
-        turn.className = "turn " + (message.role === "user" ? "user" : "assistant");
-        const who = document.createElement("div");
-        who.className = "who";
-        who.textContent = message.role === "user" ? "提问" : "回答";
-        const bubble = document.createElement("div");
-        bubble.className = "bubble";
-        if (message.role === "assistant" && message.action) {
-          const stamp = document.createElement("div");
-          stamp.className = "stamp " + message.action;
-          stamp.textContent = actionLabel[message.action] || message.action;
-          const body = document.createElement("div");
-          body.className = "body";
-          body.textContent = message.content;
-          bubble.append(stamp, body);
-        } else if (message.role === "assistant") {
-          const body = document.createElement("div");
-          body.className = "body";
-          body.textContent = message.content;
-          bubble.append(body);
-        } else {
-          bubble.textContent = message.content;
+        if (message.role === "user") mountUser(message);
+        else {
+          mountAssistant(message);
+          paintAssistant(message);
         }
-        if (message.pending) turn.classList.add("pending");
-        turn.append(who, bubble);
-        const bits = [];
-        if (message.sources && message.sources.length) bits.push("sources " + message.sources.join(", "));
-        if (message.tool_name) bits.push("tool " + message.tool_name);
-        if (message.trace_id) bits.push("trace " + message.trace_id);
-        if (bits.length) {
-          const meta = document.createElement("div");
-          meta.className = "meta";
-          meta.textContent = bits.join("  ·  ");
-          turn.append(meta);
-        }
-        transcript.append(turn);
       });
-      transcript.scrollTop = transcript.scrollHeight;
+      follow(true);
+    }
+
+    function mountUser(message) {
+      const article = document.createElement("article");
+      article.className = "turn user";
+      const who = document.createElement("div");
+      who.className = "who";
+      who.textContent = "提问";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = message.content;
+      article.append(who, bubble);
+      transcript.append(article);
+    }
+
+    function mountAssistant(turn) {
+      const article = document.createElement("article");
+      article.className = "turn assistant";
+      const who = document.createElement("div");
+      who.className = "who";
+      who.textContent = "回答";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      const stamp = document.createElement("div");
+      stamp.className = "stamp";
+      stamp.hidden = true;
+      const body = document.createElement("div");
+      body.className = "body";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.hidden = true;
+      bubble.append(stamp, body);
+      article.append(who, bubble, meta);
+      transcript.append(article);
+      turn.node = { article, stamp, body, meta };
+    }
+
+    function renderMarkdown(source) {
+      const text = String(source || "").replace(/\r\n/g, "\n");
+      return splitFences(text).map((part) => {
+        if (part.type === "code") return codeBlock(part.text, part.lang);
+        return renderBlocks(part.text);
+      }).join("");
+    }
+
+    function splitFences(text) {
+      const parts = [];
+      const re = /```([^\n`]*)\n([\s\S]*?)```/g;
+      let last = 0;
+      let match;
+      while ((match = re.exec(text))) {
+        parts.push({ type: "md", text: text.slice(last, match.index) });
+        parts.push({ type: "code", lang: match[1].trim(), text: match[2] });
+        last = match.index + match[0].length;
+      }
+      const rest = text.slice(last);
+      const openAt = rest.indexOf("```");
+      if (openAt === -1) {
+        parts.push({ type: "md", text: rest });
+        return parts;
+      }
+      const open = rest.slice(openAt).match(/```([^\n`]*)\n?([\s\S]*)$/);
+      parts.push({ type: "md", text: rest.slice(0, openAt) });
+      parts.push({ type: "code", lang: (open[1] || "").trim(), text: open[2] || "" });
+      return parts;
+    }
+
+    function codeBlock(text, lang) {
+      const body = escapeHtml(text.replace(/\n$/, ""));
+      const label = lang ? `<div class="lang">${escapeHtml(lang)}</div>` : "";
+      return `<pre>${label}<code>${body}</code></pre>`;
+    }
+
+    function renderBlocks(text) {
+      const lines = text.split("\n");
+      let html = "";
+      let i = 0;
+      while (i < lines.length) {
+        if (!lines[i].trim()) {
+          i += 1;
+          continue;
+        }
+        const heading = /^(#{1,3})\s+(.*)$/.exec(lines[i]);
+        if (heading) {
+          const level = heading[1].length;
+          html += `<h${level}>${inline(heading[2])}</h${level}>`;
+          i += 1;
+          continue;
+        }
+        if (/^>\s?/.test(lines[i])) {
+          const quote = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) {
+            quote.push(lines[i].replace(/^>\s?/, ""));
+            i += 1;
+          }
+          html += `<blockquote>${quote.map(inline).join("<br>")}</blockquote>`;
+          continue;
+        }
+        if (/^[-*]\s+/.test(lines[i])) {
+          const items = [];
+          while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^[-*]\s+/, ""));
+            i += 1;
+          }
+          html += "<ul>" + items.map((item) => `<li>${inline(item)}</li>`).join("") + "</ul>";
+          continue;
+        }
+        if (/^\d+\.\s+/.test(lines[i])) {
+          const items = [];
+          while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\d+\.\s+/, ""));
+            i += 1;
+          }
+          html += "<ol>" + items.map((item) => `<li>${inline(item)}</li>`).join("") + "</ol>";
+          continue;
+        }
+        const para = [];
+        while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
+          para.push(lines[i]);
+          i += 1;
+        }
+        html += `<p>${para.map(inline).join("<br>")}</p>`;
+      }
+      return html;
+    }
+
+    function isBlockStart(line) {
+      return /^(#{1,3}\s+|[-*]\s+|\d+\.\s+|>\s?)/.test(line);
+    }
+
+    function inline(text) {
+      const codes = [];
+      const held = text.replace(/`([^`]+)`/g, (_, code) => {
+        codes.push(code);
+        return "\u0000" + (codes.length - 1) + "\u0000";
+      });
+      let html = escapeHtml(held);
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, href) => {
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      });
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, (_, lead, body) => `${lead}<em>${body}</em>`);
+      return html.replace(/\u0000(\d+)\u0000/g, (_, index) => `<code>${escapeHtml(codes[Number(index)])}</code>`);
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function paintAssistant(turn) {
+      if (!turn.node || !turn.node.article.isConnected) mountAssistant(turn);
+      const node = turn.node;
+      if (turn.action) {
+        node.stamp.hidden = false;
+        node.stamp.className = "stamp " + turn.action;
+        node.stamp.textContent = actionLabel[turn.action] || turn.action;
+      }
+      node.body.innerHTML = renderMarkdown(turn.content);
+      node.article.classList.toggle("pending", Boolean(turn.pending));
+      const bits = [];
+      if (turn.sources && turn.sources.length) bits.push("sources " + turn.sources.join(", "));
+      if (turn.tool_name) bits.push("tool " + turn.tool_name);
+      if (turn.trace_id) bits.push("trace " + turn.trace_id);
+      node.meta.hidden = bits.length === 0;
+      node.meta.textContent = bits.join("  ·  ");
+      follow(Boolean(turn.pending));
+    }
+
+    function follow(force) {
+      const gap = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
+      if (force || gap < 140) transcript.scrollTop = transcript.scrollHeight;
     }
 
     function showError(text) {
