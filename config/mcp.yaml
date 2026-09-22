@@ -1,0 +1,8 @@
+# MultiServerMCPClient 的服务器表。在仓库根目录执行。
+notes:
+  transport: stdio
+  command: uv
+  args:
+    - run
+    - python
+    - servers/notes_mcp.py

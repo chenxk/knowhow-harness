@@ -1,0 +1,12 @@
+cases:
+  - id: reset-password
+    question: 如何重置密码
+    expect_action: retrieve
+    expect_source: password-reset.md
+  - id: lookup
+    question: lookup_note 重置密码
+    expect_action: tool
+    expect_tool: lookup_note
+  - id: hello
+    question: 你好
+    expect_action: answer
