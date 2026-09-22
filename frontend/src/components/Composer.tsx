@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
+import { CopyButton } from './CopyButton'
 
 export function Composer({
   busy,
@@ -36,9 +37,12 @@ export function Composer({
         disabled={busy}
         aria-label="消息输入"
       />
-      <button type="submit" disabled={busy || !value.trim()}>
-        {busy ? '…' : '发送'}
-      </button>
+      <div className="composer-actions">
+        {value.trim() ? <CopyButton text={value} className="copy-btn-composer" /> : null}
+        <button type="submit" disabled={busy || !value.trim()}>
+          {busy ? '…' : '发送'}
+        </button>
+      </div>
     </form>
   )
 }

@@ -62,7 +62,7 @@ def build_graph(
         writer = get_stream_writer()
         history = _prior_chat(state, limit=history_turns)
         memories = list(state.get("memories") or [])
-        async for delta in responder.astream(
+        async for part in responder.astream(
             question=_last_human(state),
             query=state["query"],
             context=state["context"],
@@ -72,8 +72,11 @@ def build_graph(
             history=history,
             memories=memories,
         ):
-            parts.append(delta)
-            writer({"text": delta})
+            if part.kind == "thinking":
+                writer({"thinking": part.text})
+                continue
+            parts.append(part.text)
+            writer({"text": part.text})
         return {"messages": [AIMessage(content="".join(parts))]}
 
     builder = StateGraph(GraphState)

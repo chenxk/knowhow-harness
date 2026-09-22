@@ -64,7 +64,7 @@ export interface EvalResult {
 
 export type StreamEvent =
   | {
-      type: 'status' | 'delta' | 'done'
+      type: 'status' | 'thinking' | 'delta' | 'done'
       text?: string
       action?: Action
       sources?: string[]
@@ -84,6 +84,7 @@ export interface TranscriptMessage {
   id: string
   role: ChatRole
   content: string
+  thinking?: string
   action?: Action
   sources?: string[]
   tool_name?: string

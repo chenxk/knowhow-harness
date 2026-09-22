@@ -282,12 +282,83 @@ button {
   max-width: 36ch;
 }
 
-.turn .who {
+.turn-head {
+  display: flex;
+  align-items: center;
   margin-bottom: 6px;
+}
+
+.turn .who {
+  margin-bottom: 0;
   color: var(--muted);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.turn-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 1.6em;
+}
+
+.turn-foot-start {
+  justify-content: flex-start;
+}
+
+.turn-foot-end {
+  justify-content: flex-end;
+}
+
+.copy-btn {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.turn:hover .copy-btn,
+.turn:focus-within .copy-btn,
+.copy-btn:focus-visible,
+.copy-btn.copied,
+.copy-btn-composer {
+  opacity: 1;
+}
+
+.copy-btn:hover:not(:disabled),
+.copy-btn:focus-visible {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.copy-btn.copied {
+  color: var(--accent);
+  border-color: rgba(47, 158, 143, 0.4);
+  background: var(--accent-soft);
+}
+
+.copy-btn:disabled {
+  opacity: 0;
+  cursor: default;
+}
+
+@media (hover: none) {
+  .copy-btn {
+    opacity: 0.75;
+  }
 }
 
 .bubble {
@@ -380,6 +451,53 @@ button {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
+.think-block {
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.think-block summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  user-select: none;
+}
+
+.think-block summary::-webkit-details-marker {
+  display: none;
+}
+
+.think-block summary::before {
+  content: '▸ ';
+  color: var(--accent);
+}
+
+.think-block[open] summary::before {
+  content: '▾ ';
+}
+
+.think-block.streaming summary {
+  color: var(--ink);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.think-body {
+  margin: 0;
+  padding: 0 10px 10px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -394,7 +512,7 @@ button {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .feedback .hint {
@@ -421,6 +539,32 @@ button {
   background: rgba(16, 20, 26, 0.9);
 }
 
+.composer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.composer-actions .copy-btn-composer {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.composer-actions .copy-btn-composer:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.composer-actions .copy-btn-composer.copied {
+  color: var(--accent);
+  border-color: rgba(47, 158, 143, 0.4);
+  background: var(--accent-soft);
+}
+
 .composer textarea {
   width: 100%;
   resize: none;
@@ -439,7 +583,7 @@ button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.composer button,
+.composer button[type='submit'],
 .primary,
 .ghost {
   border-radius: 8px;
@@ -451,7 +595,7 @@ button {
     color 0.15s ease;
 }
 
-.composer button,
+.composer button[type='submit'],
 .primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -459,13 +603,13 @@ button {
   font-weight: 600;
 }
 
-.composer button:disabled,
+.composer button[type='submit']:disabled,
 .primary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.composer button:not(:disabled):hover,
+.composer button[type='submit']:not(:disabled):hover,
 .primary:hover {
   filter: brightness(1.06);
 }

@@ -19,12 +19,17 @@ from knowhow.rag.store import terms
 from knowhow.types import ChatMessage
 
 MemoryCategory = Literal["preference", "profile", "decision", "other"]
+MemoryStatus = Literal["pending", "active"]
 
 _REMEMBER = re.compile(r"请记住[：:]\s*(.+)", re.DOTALL)
 _NAME = re.compile(r"我叫\s*([^\s，。！？,.!?；;：:]{1,40})")
 _AT = re.compile(r"我在\s*([^\s，。！？,.!?；;：:]{1,40})")
 _LIKE = re.compile(r"我喜欢\s*([^\s，。！？,.!?；;：:]{1,40})")
 _CJK = re.compile(r"[\u4e00-\u9fff]")
+_EPHEMERAL = re.compile(
+    r"(帮我|提醒我|查一下|订一张|发邮件|待办|\btodo\b|今天先|明天再|稍后|等会儿|等下)",
+    re.IGNORECASE,
+)
 
 
 def _memory_terms(text: str) -> Counter[str]:
@@ -34,7 +39,6 @@ def _memory_terms(text: str) -> Counter[str]:
     return bag
 
 
-
 class MemoryItem(BaseModel):
     """One atomic fact recalled across sessions."""
 
@@ -42,6 +46,8 @@ class MemoryItem(BaseModel):
     user_id: str = "local"
     content: str
     category: MemoryCategory = "other"
+    status: MemoryStatus = "active"
+    hit_count: int = 1
     source_session_id: str | None = None
     created_at: str
     updated_at: str
@@ -55,8 +61,16 @@ class MemoryHit(BaseModel):
     score: float
 
 
+class ExtractedFact(BaseModel):
+    """One candidate fact from offline rules or the live extractor."""
+
+    content: str
+    category: MemoryCategory = "other"
+    durable: bool = True
+
+
 class SqliteMemoryStore:
-    """SQLite-backed fact store with soft delete and lexical Top-K search."""
+    """SQLite-backed fact store with pending→active promotion and soft delete."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -74,33 +88,70 @@ class SqliteMemoryStore:
               source_session_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
-              active INTEGER NOT NULL DEFAULT 1
+              active INTEGER NOT NULL DEFAULT 1,
+              status TEXT NOT NULL DEFAULT 'active',
+              hit_count INTEGER NOT NULL DEFAULT 1
             )
             """
         )
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(memories)")}
+        if "status" not in cols:
+            self._conn.execute(
+                "ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            )
+        if "hit_count" not in cols:
+            self._conn.execute(
+                "ALTER TABLE memories ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 1"
+            )
 
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()
 
-    def list(self, *, user_id: str = "local", include_inactive: bool = False) -> list[MemoryItem]:
-        """Return memories newest-first."""
+    def list(
+        self,
+        *,
+        user_id: str = "local",
+        include_inactive: bool = False,
+        statuses: Sequence[MemoryStatus] | None = None,
+    ) -> list[MemoryItem]:
+        """Return memories newest-first. Default: non-deleted pending+active."""
+        wanted = list(statuses) if statuses is not None else ["pending", "active"]
+        placeholders = ",".join("?" for _ in wanted)
         if include_inactive:
             rows = self._conn.execute(
-                "SELECT * FROM memories WHERE user_id = ? ORDER BY updated_at DESC",
-                (user_id,),
+                f"""
+                SELECT * FROM memories
+                WHERE user_id = ? AND status IN ({placeholders})
+                ORDER BY updated_at DESC
+                """,
+                (user_id, *wanted),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                """
+                f"""
                 SELECT * FROM memories
-                WHERE user_id = ? AND active = 1
+                WHERE user_id = ? AND active = 1 AND status IN ({placeholders})
                 ORDER BY updated_at DESC
                 """,
-                (user_id,),
+                (user_id, *wanted),
             ).fetchall()
         return [_row_to_item(row) for row in rows]
+
+    def count_active(self, *, user_id: str = "local") -> int:
+        """Count promoted (active-status) memories for meta badges."""
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM memories
+            WHERE user_id = ? AND active = 1 AND status = 'active'
+            """,
+            (user_id,),
+        ).fetchone()
+        return int(row["n"]) if row is not None else 0
 
     def get(self, memory_id: str) -> MemoryItem | None:
         """Load one memory by id."""
@@ -117,14 +168,18 @@ class SqliteMemoryStore:
         category: MemoryCategory = "other",
         user_id: str = "local",
         source_session_id: str | None = None,
+        status: MemoryStatus = "pending",
+        hit_count: int = 1,
     ) -> MemoryItem:
-        """Insert a new active memory."""
+        """Insert a new memory (default pending until promoted)."""
         now = _now()
         item = MemoryItem(
             id=_new_id(),
             user_id=user_id,
             content=content.strip(),
             category=category,
+            status=status,
+            hit_count=hit_count,
             source_session_id=source_session_id,
             created_at=now,
             updated_at=now,
@@ -133,8 +188,9 @@ class SqliteMemoryStore:
         self._conn.execute(
             """
             INSERT INTO memories
-              (id, user_id, content, category, source_session_id, created_at, updated_at, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+              (id, user_id, content, category, source_session_id,
+               created_at, updated_at, active, status, hit_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 item.id,
@@ -144,6 +200,8 @@ class SqliteMemoryStore:
                 item.source_session_id,
                 item.created_at,
                 item.updated_at,
+                item.status,
+                item.hit_count,
             ),
         )
         self._conn.commit()
@@ -157,12 +215,20 @@ class SqliteMemoryStore:
         user_id: str = "local",
         source_session_id: str | None = None,
         dedupe_threshold: float = 0.82,
+        status: MemoryStatus = "pending",
+        promote_hits: int = 2,
+        force_active: bool = False,
     ) -> MemoryItem:
-        """Insert or update a near-duplicate memory for the same topic."""
+        """Insert or update a near-duplicate; promote when forced or hit threshold."""
         cleaned = content.strip()
         if not cleaned:
             raise ValueError("memory content is empty")
-        hits = self.search(cleaned, k=1, user_id=user_id)
+        hits = self.search(
+            cleaned,
+            k=1,
+            user_id=user_id,
+            statuses=("pending", "active"),
+        )
         if hits and hits[0].score >= dedupe_threshold:
             existing = hits[0].item
             existing.content = cleaned
@@ -171,11 +237,17 @@ class SqliteMemoryStore:
                 existing.source_session_id = source_session_id
             existing.updated_at = _now()
             existing.active = True
+            if force_active or status == "active":
+                existing.status = "active"
+            else:
+                existing.hit_count = max(1, existing.hit_count) + 1
+                if existing.hit_count >= promote_hits:
+                    existing.status = "active"
             self._conn.execute(
                 """
                 UPDATE memories
                 SET content = ?, category = ?, source_session_id = ?,
-                    updated_at = ?, active = 1
+                    updated_at = ?, active = 1, status = ?, hit_count = ?
                 WHERE id = ?
                 """,
                 (
@@ -183,17 +255,42 @@ class SqliteMemoryStore:
                     existing.category,
                     existing.source_session_id,
                     existing.updated_at,
+                    existing.status,
+                    existing.hit_count,
                     existing.id,
                 ),
             )
             self._conn.commit()
             return existing
+        initial: MemoryStatus = "active" if force_active or status == "active" else "pending"
         return self.add(
             cleaned,
             category=category,
             user_id=user_id,
             source_session_id=source_session_id,
+            status=initial,
+            hit_count=1,
         )
+
+    def promote(self, memory_id: str) -> MemoryItem | None:
+        """Confirm a pending memory into active recall. Return None when missing."""
+        item = self.get(memory_id)
+        if item is None or not item.active:
+            return None
+        if item.status == "active":
+            return item
+        now = _now()
+        hit_count = max(1, item.hit_count)
+        self._conn.execute(
+            """
+            UPDATE memories
+            SET status = 'active', updated_at = ?, hit_count = ?
+            WHERE id = ? AND active = 1
+            """,
+            (now, hit_count, memory_id),
+        )
+        self._conn.commit()
+        return self.get(memory_id)
 
     def soft_delete(self, memory_id: str) -> bool:
         """Mark a memory inactive. Return False when missing."""
@@ -213,13 +310,14 @@ class SqliteMemoryStore:
         *,
         k: int = 4,
         user_id: str = "local",
+        statuses: Sequence[MemoryStatus] = ("active",),
     ) -> list[MemoryHit]:
-        """Lexical Top-K over active memories (same scoring family as RAG)."""
+        """Lexical Top-K. Chat recall defaults to promoted (active) only."""
         query_terms = _memory_terms(query)
         if not query_terms:
             return []
         ranked: list[MemoryHit] = []
-        for item in self.list(user_id=user_id):
+        for item in self.list(user_id=user_id, statuses=statuses):
             score = _cosine(query_terms, _memory_terms(item.content))
             if score > 0:
                 ranked.append(MemoryHit(item=item, score=score))
@@ -227,20 +325,22 @@ class SqliteMemoryStore:
         return ranked[:k]
 
 
-def extract_facts_offline(turns: Sequence[ChatMessage]) -> list[tuple[str, MemoryCategory]]:
+def extract_facts_offline(turns: Sequence[ChatMessage]) -> list[ExtractedFact]:
     """Rule-based fact extraction for offline mode."""
-    found: list[tuple[str, MemoryCategory]] = []
+    found: list[ExtractedFact] = []
     seen: set[str] = set()
     for turn in turns:
         if turn.role != "user":
             continue
         text = turn.content.strip()
-        for fact, category in _rules(text):
-            key = fact.casefold()
+        for fact in _rules(text):
+            if not fact.durable:
+                continue
+            key = fact.content.casefold()
             if key in seen:
                 continue
             seen.add(key)
-            found.append((fact, category))
+            found.append(fact)
     return found
 
 
@@ -253,21 +353,54 @@ def explicit_remember(text: str) -> str | None:
     return payload or None
 
 
-def _rules(text: str) -> list[tuple[str, MemoryCategory]]:
-    rows: list[tuple[str, MemoryCategory]] = []
+def is_ephemeral_turn(text: str) -> bool:
+    """True for one-off tasks / short-lived context (skip auto-extract)."""
+    if explicit_remember(text) is not None:
+        return False
+    return _EPHEMERAL.search(text.strip()) is not None
+
+
+def _rules(text: str) -> list[ExtractedFact]:
+    rows: list[ExtractedFact] = []
     remember = explicit_remember(text)
     if remember is not None:
-        rows.append((remember, _guess_category(remember)))
+        rows.append(
+            ExtractedFact(
+                content=remember,
+                category=_guess_category(remember),
+                durable=True,
+            )
+        )
+        return rows
+    if is_ephemeral_turn(text):
         return rows
     name = _NAME.search(text)
     if name is not None:
-        rows.append((f"用户叫{name.group(1).strip()}", "profile"))
+        rows.append(
+            ExtractedFact(
+                content=f"用户叫{name.group(1).strip()}",
+                category="profile",
+                durable=True,
+            )
+        )
     at = _AT.search(text)
     if at is not None:
-        rows.append((f"用户在{at.group(1).strip()}", "profile"))
+        rows.append(
+            ExtractedFact(
+                content=f"用户在{at.group(1).strip()}",
+                category="profile",
+                durable=True,
+            )
+        )
     like = _LIKE.search(text)
     if like is not None:
-        rows.append((f"用户喜欢{like.group(1).strip()}", "preference"))
+        rows.append(
+            ExtractedFact(
+                content=f"用户喜欢{like.group(1).strip()}",
+                category="preference",
+                durable=True,
+            )
+        )
     return rows
 
 
@@ -291,11 +424,17 @@ def format_memories(contents: Sequence[str]) -> str:
 
 
 def _row_to_item(row: sqlite3.Row) -> MemoryItem:
+    keys = set(row.keys())
+    status_raw = row["status"] if "status" in keys else "active"
+    status: MemoryStatus = "pending" if status_raw == "pending" else "active"
+    hit = int(row["hit_count"]) if "hit_count" in keys else 1
     return MemoryItem(
         id=row["id"],
         user_id=row["user_id"],
         content=row["content"],
         category=row["category"],
+        status=status,
+        hit_count=hit,
         source_session_id=row["source_session_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -323,7 +462,10 @@ def _cosine(left: Counter[str], right: Counter[str]) -> float:
 
 
 _EXTRACT_SYSTEM = """从对话中抽出值得跨会话记住的原子事实。只输出 JSON 数组。
-每项字段：content（一句话事实）、category（preference|profile|decision|other）。
+每项字段：content（一句话事实）、category（preference|profile|decision|other）、durable（bool）。
+durable=true：身份、偏好、长期决定等跨会话仍有用的事实。
+durable=false：一次性任务、临时日程、短暂上下文——不要记。
+也可用 {"action":"ignore"} 跳过该项。
 不要存整段聊天。没有可记事实时输出 []。
 """
 
@@ -331,7 +473,7 @@ _EXTRACT_SYSTEM = """从对话中抽出值得跨会话记住的原子事实。�
 async def extract_facts_live(
     chat: object,
     turns: Sequence[ChatMessage],
-) -> list[tuple[str, MemoryCategory]]:
+) -> list[ExtractedFact]:
     """Ask the chat model for atomic facts. Invalid JSON becomes empty."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -352,7 +494,7 @@ async def extract_facts_live(
     return _parse_extract_json(text)
 
 
-def _parse_extract_json(text: str) -> list[tuple[str, MemoryCategory]]:
+def _parse_extract_json(text: str) -> list[ExtractedFact]:
     raw = text.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE | re.DOTALL)
@@ -364,9 +506,11 @@ def _parse_extract_json(text: str) -> list[tuple[str, MemoryCategory]]:
     if not isinstance(data, list):
         return []
     allowed: set[str] = {"preference", "profile", "decision", "other"}
-    rows: list[tuple[str, MemoryCategory]] = []
+    rows: list[ExtractedFact] = []
     for item in data:
         if not isinstance(item, dict):
+            continue
+        if str(item.get("action") or "").casefold() == "ignore":
             continue
         content = str(item.get("content") or "").strip()
         category = str(item.get("category") or "other")
@@ -374,5 +518,17 @@ def _parse_extract_json(text: str) -> list[tuple[str, MemoryCategory]]:
             continue
         if category not in allowed:
             category = "other"
-        rows.append((content, cast(MemoryCategory, category)))
+        durable_raw = item.get("durable", True)
+        durable = durable_raw is not False and str(durable_raw).casefold() not in {
+            "false",
+            "0",
+            "no",
+        }
+        rows.append(
+            ExtractedFact(
+                content=content,
+                category=cast(MemoryCategory, category),
+                durable=durable,
+            )
+        )
     return rows

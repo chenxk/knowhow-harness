@@ -10,6 +10,20 @@ import {
 import type { SessionSummary, TranscriptMessage } from '../api/types'
 import { uid } from '../lib/format'
 
+/** Deduplicate StrictMode double-mount boot so we do not create two empty sessions. */
+let bootOnce: Promise<string> | null = null
+
+async function resolveInitialSessionId(): Promise<string> {
+  if (!bootOnce) {
+    bootOnce = (async () => {
+      const rows = await listSessions()
+      if (rows.length) return rows[0].id
+      return (await createSession()).id
+    })()
+  }
+  return bootOnce
+}
+
 export function useWorkspace() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [sessionId, setSessionId] = useState('')
@@ -48,8 +62,7 @@ export function useWorkspace() {
 
   const newSession = useCallback(async () => {
     const session = await createSession()
-    const rows = await refreshSessions()
-    setSessions(rows)
+    await refreshSessions()
     await selectSession(session.id)
   }, [refreshSessions, selectSession])
 
@@ -57,9 +70,6 @@ export function useWorkspace() {
     async (id: string, title: string) => {
       await renameSession(id, title)
       await refreshSessions()
-      if (id === sessionIdRef.current) {
-        // title lives in sidebar list; transcript stays
-      }
     },
     [refreshSessions],
   )
@@ -124,6 +134,11 @@ export function useWorkspace() {
             continue
           }
           if (event.type === 'status' || event.type === 'done') {
+            if (event.type === 'done') {
+              // Answer is complete; keep the SSE open for session metadata
+              // / memory extract without freezing the composer.
+              setBusy(false)
+            }
             setMessages((prev) =>
               prev.map((item) => {
                 if (item.id !== assistantId) return item
@@ -146,6 +161,16 @@ export function useWorkspace() {
               prev.map((item) =>
                 item.id === assistantId
                   ? { ...item, content: item.content + (event.text ?? '') }
+                  : item,
+              ),
+            )
+            continue
+          }
+          if (event.type === 'thinking') {
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === assistantId
+                  ? { ...item, thinking: (item.thinking ?? '') + (event.text ?? '') }
                   : item,
               ),
             )
@@ -174,24 +199,15 @@ export function useWorkspace() {
     )
   }, [])
 
-  const booted = useRef(false)
-
   useEffect(() => {
-    if (booted.current) return
-    booted.current = true
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await refreshSessions()
+        const id = await resolveInitialSessionId()
         if (cancelled) return
-        if (!rows.length) {
-          const session = await createSession()
-          if (cancelled) return
-          await refreshSessions()
-          await selectSession(session.id)
-          return
-        }
-        await selectSession(rows[0].id)
+        await refreshSessions()
+        if (cancelled) return
+        await selectSession(id)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '无法加载会话')

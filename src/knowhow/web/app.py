@@ -69,6 +69,10 @@ class EvalOut(BaseModel):
     scored: bool = False
 
 
+class ConsolidateIn(BaseModel):
+    session_id: str = Field(pattern=_SESSION.pattern)
+
+
 class ScoreIn(BaseModel):
     trace_id: str = Field(min_length=8, max_length=128)
     value: float = Field(ge=0, le=1)
@@ -106,7 +110,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             tools=current.catalog.names(),
             skills=current.skill_names,
             tracing=current.tracer.enabled,
-            memory_count=len(current.memory.list()),
+            memory_count=current.memory.count_active(),
         )
 
     @app.get("/api/sessions", response_model=list[SessionSummary])
@@ -157,6 +161,34 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         current: Runtime = app.state.runtime
         return current.memory.list()
 
+    @app.post("/api/memories/{memory_id}/promote", response_model=MemoryItem)
+    async def promote_memory(memory_id: str) -> MemoryItem:
+        if _MEMORY.fullmatch(memory_id) is None:
+            raise HTTPException(status_code=400, detail="记忆 id 无效")
+        current: Runtime = app.state.runtime
+        store: SqliteMemoryStore = current.memory
+        item = store.promote(memory_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="记忆不存在")
+        return item
+
+    @app.post("/api/memories/consolidate")
+    async def consolidate_memories(body: ConsolidateIn) -> dict[str, object]:
+        current: Runtime = app.state.runtime
+        if not current.settings.memory_consolidate_on_switch:
+            return {"ok": True, "skipped": True, "written": 0}
+        store: JsonSessionStore = app.state.sessions
+        session = store.get(_check_session(body.session_id))
+        if session is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        history = store.chat_history(session, limit=current.settings.history_turns)
+        async with app.state.lock:
+            written = await current.consolidate_session(
+                history,
+                session_id=session.id,
+            )
+        return {"ok": True, "written": written}
+
     @app.delete("/api/memories/{memory_id}")
     async def delete_memory(memory_id: str) -> dict[str, bool]:
         if _MEMORY.fullmatch(memory_id) is None:
@@ -192,7 +224,9 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                         question,
                         thread_id=session_id,
                         history=history,
-                        defer_extract=True,
+                        # Await extract after the answer so /api/memories
+                        # refresh right after SSE sees the written facts.
+                        defer_extract=False,
                     ):
                         payload = event.model_dump(mode="json")
                         yield _sse(payload)
@@ -287,9 +321,12 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         def index() -> FileResponse:
             return FileResponse(spa)
 
-        @app.get("/favicon.svg")
-        def favicon() -> FileResponse:
-            return FileResponse(_STATIC / "favicon.svg")
+        favicon_path = _STATIC / "favicon.svg"
+        if favicon_path.is_file():
+
+            @app.get("/favicon.svg")
+            def favicon() -> FileResponse:
+                return FileResponse(favicon_path)
     else:
 
         @app.get("/", response_class=HTMLResponse)

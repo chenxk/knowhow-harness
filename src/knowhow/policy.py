@@ -75,7 +75,6 @@ class ScriptedDecider:
         history: Sequence[ChatMessage] = (),
         memories: Sequence[str] = (),
     ) -> Decision:
-        del memories
         probe = _followup_probe(question, history)
         folded = probe.lower()
         for name in self._catalog.names():
@@ -97,6 +96,10 @@ class ScriptedDecider:
                     tool_name=skill.tool,
                     guidance=skill.body,
                 )
+        # Recalled personal facts beat corpus retrieval so offline answers
+        # do not bury memory under an unrelated RAG hit.
+        if memories:
+            return Decision(action="answer", query=probe)
         hits = self._store.search(probe, k=1)
         if hits and hits[0].score >= self._threshold:
             return Decision(action="retrieve", query=probe)

@@ -56,6 +56,8 @@ def test_sessions_crud_and_chat_persist(client: TestClient) -> None:
     )
     assert first.status_code == 200
     events = _events(first.text)
+    assert not any(event["type"] == "thinking" for event in events)
+    assert any(event["type"] == "delta" for event in events)
     done = next(event for event in events if event["type"] == "done")
     assert done["action"] == "retrieve"
     assert "重置密码" in done["answer"]

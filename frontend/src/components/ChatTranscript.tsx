@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import { postScore } from '../api/client'
 import type { TranscriptMessage } from '../api/types'
 import { ACTION_LABEL } from '../lib/format'
+import { CopyButton } from './CopyButton'
 import { Markdown } from './Markdown'
 
 export function ChatTranscript({
@@ -28,8 +30,15 @@ export function ChatTranscript({
       {messages.map((message) =>
         message.role === 'user' ? (
           <article key={message.id} className="turn user">
-            <div className="who">你</div>
+            <div className="turn-head">
+              <div className="who">你</div>
+            </div>
             <div className="bubble plain">{message.content}</div>
+            {message.content.trim() ? (
+              <div className="turn-foot turn-foot-end">
+                <CopyButton text={message.content} />
+              </div>
+            ) : null}
           </article>
         ) : (
           <AssistantTurn
@@ -77,9 +86,18 @@ function AssistantTurn({
     }
   }
 
+  // Prefer answer text; include thinking when present so copy matches what's shown.
+  const copyText = message.content.trim()
+    ? message.thinking?.trim()
+      ? `${message.thinking.trim()}\n\n${message.content}`
+      : message.content
+    : message.thinking?.trim() || ''
+
   return (
     <article className="turn assistant">
-      <div className="who">Knowhow</div>
+      <div className="turn-head">
+        <div className="who">Knowhow</div>
+      </div>
       <div className="bubble">
         {bits.length > 0 && (
           <div className={`stamp action-${message.action ?? 'answer'}`}>
@@ -87,35 +105,71 @@ function AssistantTurn({
             {message.pending ? ' · …' : ''}
           </div>
         )}
+        {message.thinking ? (
+          <ThinkingBlock
+            text={message.thinking}
+            streaming={Boolean(message.pending && !message.content)}
+          />
+        ) : null}
         <div className="body">
           {message.content ? (
             <Markdown source={message.content} />
-          ) : message.pending ? (
+          ) : message.pending && !message.thinking ? (
             <span className="thinking">思考中</span>
           ) : null}
         </div>
       </div>
-      {tracing && message.trace_id && !message.pending && (
-        <div className="feedback">
-          <button
-            type="button"
-            className={message.feedback === 1 ? 'picked' : ''}
-            onClick={() => score(1)}
-            disabled={message.feedback !== undefined}
-          >
-            有用
-          </button>
-          <button
-            type="button"
-            className={message.feedback === 0 ? 'picked' : ''}
-            onClick={() => score(0)}
-            disabled={message.feedback !== undefined}
-          >
-            没用
-          </button>
-          {message.feedback !== undefined && <span className="hint">已记录</span>}
+      {(copyText || (tracing && message.trace_id && !message.pending)) && (
+        <div className="turn-foot turn-foot-start">
+          {copyText ? <CopyButton text={copyText} /> : null}
+          {tracing && message.trace_id && !message.pending && (
+            <div className="feedback">
+              <button
+                type="button"
+                className={message.feedback === 1 ? 'picked' : ''}
+                onClick={() => score(1)}
+                disabled={message.feedback !== undefined}
+              >
+                有用
+              </button>
+              <button
+                type="button"
+                className={message.feedback === 0 ? 'picked' : ''}
+                onClick={() => score(0)}
+                disabled={message.feedback !== undefined}
+              >
+                没用
+              </button>
+              {message.feedback !== undefined && <span className="hint">已记录</span>}
+            </div>
+          )}
         </div>
       )}
     </article>
+  )
+}
+
+function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
+  const [open, setOpen] = useState(streaming)
+  const wasStreaming = useRef(streaming)
+
+  useEffect(() => {
+    if (streaming) {
+      setOpen(true)
+    } else if (wasStreaming.current && !streaming) {
+      setOpen(false)
+    }
+    wasStreaming.current = streaming
+  }, [streaming])
+
+  return (
+    <details
+      className={`think-block${streaming ? ' streaming' : ''}`}
+      open={open}
+      onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
+    >
+      <summary>思考{streaming ? '中…' : ''}</summary>
+      <pre className="think-body">{text}</pre>
+    </details>
   )
 }

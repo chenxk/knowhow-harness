@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
-from typing import Protocol
+from typing import Any, Protocol
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from knowhow.policy import Chat
-from knowhow.types import ChatMessage, message_text
+from knowhow.types import AnswerPart, ChatMessage, message_text
 
 _ANSWER_SYSTEM = """用用户的语言回答。资料和工具结果里没有的事实不要编造。
 有来源时在末尾列出来源文件名。
@@ -32,8 +32,8 @@ class Responder(Protocol):
         guidance: str,
         history: Sequence[ChatMessage] = (),
         memories: Sequence[str] = (),
-    ) -> AsyncIterator[str]:
-        """Yield answer text as it is produced."""
+    ) -> AsyncIterator[AnswerPart]:
+        """Yield thinking and answer fragments as they are produced."""
 
 
 class OfflineResponder:
@@ -50,7 +50,7 @@ class OfflineResponder:
         guidance: str,
         history: Sequence[ChatMessage] = (),
         memories: Sequence[str] = (),
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[AnswerPart]:
         del query, guidance, history
         if tool_output:
             text = tool_output
@@ -66,7 +66,7 @@ class OfflineResponder:
         else:
             text = "没有检索到资料，也没有调用工具。"
         for start in range(0, len(text), _CHUNK):
-            yield text[start : start + _CHUNK]
+            yield AnswerPart(kind="text", text=text[start : start + _CHUNK])
 
 
 class ModelResponder:
@@ -86,7 +86,7 @@ class ModelResponder:
         guidance: str,
         history: Sequence[ChatMessage] = (),
         memories: Sequence[str] = (),
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[AnswerPart]:
         payload = {
             "question": question,
             "query": query,
@@ -99,21 +99,81 @@ class ModelResponder:
                 {"role": item.role, "content": item.content} for item in history
             ],
         }
-        async for chunk in self._chat.astream(
-            [
-                SystemMessage(content=_ANSWER_SYSTEM),
-                HumanMessage(content=str(payload)),
-            ]
-        ):
-            delta = message_text(chunk.content)
-            if delta:
-                yield delta
+        messages = [
+            SystemMessage(content=_ANSWER_SYSTEM),
+            HumanMessage(content=str(payload)),
+        ]
+        async for part in _stream_chat(self._chat, messages):
+            yield part
 
 
 def _is_remember_ack(question: str) -> bool:
     from knowhow.memory import explicit_remember
 
     return explicit_remember(question) is not None
+
+
+async def _stream_chat(
+    chat: Chat,
+    messages: list[SystemMessage | HumanMessage],
+) -> AsyncIterator[AnswerPart]:
+    """Prefer raw OpenAI deltas so provider `reasoning_content` is not dropped."""
+    client = getattr(chat, "async_client", None)
+    model = getattr(chat, "model_name", None) or getattr(chat, "model", None)
+    if client is not None and isinstance(model, str) and model and hasattr(client, "create"):
+        wire = [
+            {"role": "system", "content": messages[0].content},
+            {"role": "user", "content": messages[1].content},
+        ]
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": wire,
+            "stream": True,
+        }
+        temperature = getattr(chat, "temperature", None)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        # ChatOpenAI.async_client is already openai AsyncCompletions.
+        stream = await client.create(**kwargs)
+        async for chunk in stream:
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = chunk.choices[0].delta
+            thinking = _delta_reasoning(delta)
+            if thinking:
+                yield AnswerPart(kind="thinking", text=thinking)
+            content = getattr(delta, "content", None)
+            if isinstance(content, str) and content:
+                yield AnswerPart(kind="text", text=content)
+        return
+
+    async for chunk in chat.astream(messages):
+        thinking = _chunk_reasoning(chunk)
+        if thinking:
+            yield AnswerPart(kind="thinking", text=thinking)
+        delta = message_text(chunk.content)
+        if delta:
+            yield AnswerPart(kind="text", text=delta)
+
+
+def _delta_reasoning(delta: object) -> str:
+    value = getattr(delta, "reasoning_content", None)
+    if isinstance(value, str) and value:
+        return value
+    extra = getattr(delta, "model_extra", None)
+    if isinstance(extra, dict):
+        nested = extra.get("reasoning_content")
+        if isinstance(nested, str) and nested:
+            return nested
+    return ""
+
+
+def _chunk_reasoning(chunk: object) -> str:
+    kwargs = getattr(chunk, "additional_kwargs", None)
+    if not isinstance(kwargs, dict):
+        return ""
+    value = kwargs.get("reasoning_content")
+    return value if isinstance(value, str) else ""
 
 
 _CHUNK = 24

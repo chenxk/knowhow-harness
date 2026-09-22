@@ -14,6 +14,7 @@ from knowhow.config import Settings
 from knowhow.graph.builder import build_graph
 from knowhow.graph.state import GraphState
 from knowhow.memory import (
+    ExtractedFact,
     SqliteMemoryStore,
     explicit_remember,
     extract_facts_live,
@@ -149,6 +150,9 @@ class Runtime:
                     tool_name=tool_name,
                 )
             elif mode == "custom" and isinstance(payload, dict):
+                thinking = payload.get("thinking")
+                if isinstance(thinking, str) and thinking:
+                    yield StreamEvent(type="thinking", text=thinking)
                 text = payload.get("text")
                 if isinstance(text, str) and text:
                     yield StreamEvent(type="delta", text=text)
@@ -157,13 +161,7 @@ class Runtime:
         answer = _last_ai(values)
         remembered = explicit_remember(question)
         if remembered is not None:
-            self.memory.upsert(
-                remembered,
-                category="other",
-                user_id=user_id,
-                source_session_id=thread_id,
-                dedupe_threshold=self.settings.memory_dedupe_threshold,
-            )
+            self._write_explicit(remembered, session_id=thread_id, user_id=user_id)
         yield StreamEvent(
             type="done",
             action=_as_action(values.get("action"), action),
@@ -186,11 +184,12 @@ class Runtime:
             await self.extract_after_turn(turns, session_id=thread_id, user_id=user_id)
 
     def recall(self, question: str, *, user_id: str = "local") -> list[str]:
-        """Search durable memories for injection into decide/respond."""
+        """Search promoted (active) memories for injection into decide/respond."""
         hits = self.memory.search(
             question,
             k=self.settings.memory_top_k,
             user_id=user_id,
+            statuses=("active",),
         )
         return [hit.item.content for hit in hits]
 
@@ -214,9 +213,10 @@ class Runtime:
         *,
         session_id: str | None,
         user_id: str = "local",
+        window: int = 4,
     ) -> None:
-        """Extract atomic facts from the latest turns and upsert them."""
-        recent = list(turns[-4:]) if turns else []
+        """Light extract: durable facts go to pending (or promote on repeat)."""
+        recent = list(turns[-window:]) if turns else []
         if not recent:
             return
         last_user = next(
@@ -225,26 +225,75 @@ class Runtime:
         )
         remembered = explicit_remember(last_user)
         if remembered is not None:
-            self.memory.upsert(
-                remembered,
-                category="other",
-                user_id=user_id,
-                source_session_id=session_id,
-                dedupe_threshold=self.settings.memory_dedupe_threshold,
-            )
+            self._write_explicit(remembered, session_id=session_id, user_id=user_id)
             return
-        if self.settings.mode == "live" and self._chat is not None:
-            facts = await extract_facts_live(self._chat, recent)
-        else:
-            facts = extract_facts_offline(recent)
-        for content, category in facts:
+        facts = await self._collect_facts(recent)
+        self._ingest_candidates(facts, session_id=session_id, user_id=user_id)
+
+    async def consolidate_session(
+        self,
+        turns: Sequence[ChatMessage],
+        *,
+        session_id: str | None,
+        user_id: str = "local",
+    ) -> int:
+        """Merge recent session turns once into pending/active (switch hook)."""
+        limit = self.settings.history_turns if self.settings.history_turns > 0 else 12
+        recent = list(turns[-limit:]) if turns else []
+        if not recent:
+            return 0
+        for turn in recent:
+            if turn.role != "user":
+                continue
+            remembered = explicit_remember(turn.content)
+            if remembered is not None:
+                self._write_explicit(remembered, session_id=session_id, user_id=user_id)
+        facts = await self._collect_facts(recent)
+        durable = [fact for fact in facts if fact.durable]
+        self._ingest_candidates(durable, session_id=session_id, user_id=user_id)
+        return len(durable)
+
+    def _write_explicit(
+        self,
+        content: str,
+        *,
+        session_id: str | None,
+        user_id: str,
+    ) -> None:
+        self.memory.upsert(
+            content,
+            category="other",
+            user_id=user_id,
+            source_session_id=session_id,
+            dedupe_threshold=self.settings.memory_dedupe_threshold,
+            force_active=True,
+            promote_hits=self.settings.memory_promote_hits,
+        )
+
+    def _ingest_candidates(
+        self,
+        facts: Sequence[ExtractedFact],
+        *,
+        session_id: str | None,
+        user_id: str,
+    ) -> None:
+        for fact in facts:
+            if not fact.durable:
+                continue
             self.memory.upsert(
-                content,
-                category=category,
+                fact.content,
+                category=fact.category,
                 user_id=user_id,
                 source_session_id=session_id,
                 dedupe_threshold=self.settings.memory_dedupe_threshold,
+                status="pending",
+                promote_hits=self.settings.memory_promote_hits,
             )
+
+    async def _collect_facts(self, turns: Sequence[ChatMessage]) -> list[ExtractedFact]:
+        if self.settings.mode == "live" and self._chat is not None:
+            return await extract_facts_live(self._chat, turns)
+        return extract_facts_offline(turns)
 
     async def transcript(self, thread_id: str) -> list[ChatMessage]:
         """Return user and assistant messages stored on a checkpoint thread."""

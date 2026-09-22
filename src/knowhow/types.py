@@ -26,10 +26,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class AnswerPart(BaseModel):
+    """One fragment from the responder: model thinking or answer text."""
+
+    kind: Literal["thinking", "text"]
+    text: str
+
+
 class StreamEvent(BaseModel):
     """One server-sent event while an answer is being produced."""
 
-    type: Literal["status", "delta", "done"]
+    type: Literal["status", "thinking", "delta", "done"]
     text: str = ""
     action: Action = "answer"
     sources: list[str] = Field(default_factory=list)
