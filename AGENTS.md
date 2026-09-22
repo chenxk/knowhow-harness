@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Knowhow Harness 是一个个人可用的本地 Agent Runtime。命令从仓库根目录执行。
+Knowhow Harness：个人可用的本地 Agent Runtime，兼作学习 Agent 工程（上下文、记忆、工具/Skills、eval、观测）的工作台。日常聊天默认；学习模式经 `skills/learn-agent/` 触发。命令从仓库根目录执行。
 
 ## 模块
 
@@ -20,6 +20,10 @@ Knowhow Harness 是一个个人可用的本地 Agent Runtime。命令从仓库�
 | `sessions.py` | 会话列表与消息 JSON 持久化、自动标题 |
 | `servers/` | 独立 MCP 进程，不 import `knowhow` |
 | `frontend/` | Vite + React SPA（主 UI）。`pnpm dev` 代理 `/api`；`pnpm build` 输出到 `web/static` |
+
+## 学习模式
+
+用户问「教我… / 学习 agent / learn agent development」时命中 `skills/learn-agent/`（工具 `learn_agent`）。教练用本仓库路径讲解，优先 lab。三课：① 长期记忆 pending→active；② 上下文/会话；③ 工具与 Skills。提纲语料：`data/corpus/agent-*.md`。
 
 ## 约定
 

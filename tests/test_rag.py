@@ -12,6 +12,15 @@ def test_password_query_hits_password_note() -> None:
     assert hits[0].score > 0.12
 
 
+def test_memory_primer_hits_agent_memory_note() -> None:
+    store = InMemoryStore()
+    ingest_dir(store, project_root() / "data" / "corpus")
+    hits = store.search("pending 晋升 active 记忆与 RAG 分离", k=2)
+    assert hits
+    assert hits[0].chunk.source == "agent-memory.md"
+    assert hits[0].score > 0.12
+
+
 def test_unrelated_query_has_no_hit() -> None:
     store = InMemoryStore()
     ingest_dir(store, project_root() / "data" / "corpus")

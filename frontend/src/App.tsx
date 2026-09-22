@@ -104,7 +104,7 @@ export default function App() {
           </span>
           <div>
             <h1>Knowhow</h1>
-            <p className="tagline">本机个人助手</p>
+            <p className="tagline">本机助手 · Agent 工程工作台</p>
           </div>
         </div>
         <MetaBar meta={meta} />
@@ -132,6 +132,7 @@ export default function App() {
               tracing={Boolean(meta?.tracing)}
               onFeedback={workspace.setFeedback}
               onError={workspace.setError}
+              onSample={(text) => void handleSend(text)}
             />
           </div>
           {workspace.error ? <p className="error-line">{workspace.error}</p> : null}

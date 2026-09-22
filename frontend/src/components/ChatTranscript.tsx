@@ -5,22 +5,37 @@ import { ACTION_LABEL } from '../lib/format'
 import { CopyButton } from './CopyButton'
 import { Markdown } from './Markdown'
 
+const SAMPLE_LEARN = '教我长期记忆怎么工作'
+
 export function ChatTranscript({
   messages,
   tracing,
   onFeedback,
   onError,
+  onSample,
 }: {
   messages: TranscriptMessage[]
   tracing: boolean
   onFeedback: (id: string, value: number) => void
   onError: (message: string) => void
+  onSample?: (text: string) => void
 }) {
   if (!messages.length) {
     return (
       <div className="transcript empty-state">
         <p className="empty-lead">从这里开始</p>
-        <p className="empty-sub">会话保存在本机。试试「如何重置密码」或「请记住：我喜欢绿茶」。</p>
+        <p className="empty-sub">
+          会话保存在本机。日常聊天照常；想学 Agent 工程可点下方样例。
+        </p>
+        {onSample ? (
+          <button
+            type="button"
+            className="sample-chip"
+            onClick={() => onSample(SAMPLE_LEARN)}
+          >
+            {SAMPLE_LEARN}
+          </button>
+        ) : null}
       </div>
     )
   }

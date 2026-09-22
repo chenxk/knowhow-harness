@@ -10,6 +10,7 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from knowhow.tools.clock import current_time_text
+from knowhow.tools.learn import learn_agent_text
 
 
 class ToolCatalog(Protocol):
@@ -26,17 +27,19 @@ class ToolCatalog(Protocol):
 
 
 class StaticToolCatalog:
-    """Offline stand-in for `servers/notes_mcp.py`'s `lookup_note` tool."""
+    """Offline stand-in for `servers/notes_mcp.py`'s tools."""
 
     async def setup(self) -> None:
         return None
 
     def names(self) -> list[str]:
-        return ["current_time", "lookup_note"]
+        return ["current_time", "learn_agent", "lookup_note"]
 
     async def ainvoke(self, name: str, args: dict[str, str]) -> str:
         if name == "current_time":
             return current_time_text()
+        if name == "learn_agent":
+            return learn_agent_text(args.get("topic", ""))
         if name == "lookup_note":
             topic = args.get("topic", "")
             return (

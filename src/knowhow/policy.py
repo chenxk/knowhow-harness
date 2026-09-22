@@ -80,7 +80,7 @@ class ScriptedDecider:
         for name in self._catalog.names():
             if name in question or name in probe:
                 topic = probe.replace(name, "").strip(" :：") or probe
-                args = {"topic": topic} if name == "lookup_note" else {}
+                args = {"topic": topic} if name in {"lookup_note", "learn_agent"} else {}
                 return Decision(
                     action="tool",
                     query=topic,
@@ -94,8 +94,15 @@ class ScriptedDecider:
                     action="tool",
                     query=probe,
                     tool_name=skill.tool,
+                    tool_args={"topic": probe},
                     guidance=skill.body,
                 )
+        # Explicit 「请记住」 is a write path, not a corpus lookup — otherwise
+        # agent-memory primers steal the turn via lexical overlap.
+        from knowhow.memory import explicit_remember
+
+        if explicit_remember(question) is not None or explicit_remember(probe) is not None:
+            return Decision(action="answer", query=probe)
         # Recalled personal facts beat corpus retrieval so offline answers
         # do not bury memory under an unrelated RAG hit.
         if memories:

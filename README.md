@@ -1,8 +1,20 @@
 # Knowhow Harness
 
-为自己日常使用的个人 Agent：本地 Web UI 对话，会话可持久化，长期记忆、工具、Skills、RAG 与 Eval 都为真实可用性服务；配好密钥后 Langfuse 承接 trace 与反馈。
+个人可用的本地 Agent，也是学习 Agent 工程（上下文、记忆、工具/Skills、eval、观测）的工作台：日常聊天是默认；想学时通过 Skill 进入学习模式。
 
-单用户、本机优先。不是多租户 SaaS，也没有鉴权与队列。默认 `KNOWHOW_MODE=offline`：不调用模型，进程内词法检索，工具是 `lookup_note` 的本地替身。`live` 才接 OpenAI 兼容模型和可选的 MCP 进程。
+单用户、本机优先。不是多租户 SaaS，也没有鉴权与队列。默认 `KNOWHOW_MODE=offline`：不调用模型，进程内词法检索，工具是本地静态目录。`live` 才接 OpenAI 兼容模型和可选的 MCP 进程。
+
+## 学习模式
+
+直接聊天照常。问「教我长期记忆怎么工作」「学习 agent」等会命中 `skills/learn-agent/`，用本仓库模块当教材（优先实验，少空讲）。
+
+三课大纲：
+
+1. **长期记忆** — `memory.py` pending→active、「请记住」/重复/侧栏确认
+2. **上下文 / 会话** — `sessions.py` + `KNOWHOW_HISTORY_TURNS` 注入 decide/respond
+3. **工具与 Skills** — `tools/catalog.py` + `skills/*/SKILL.md`、offline 路由顺序
+
+语料提纲在 `data/corpus/agent-*.md`。扩展阅读：Eval / Langfuse 见 `agent-eval-observe.md`。
 
 ## 布局
 
@@ -24,7 +36,8 @@ src/knowhow/
   web/static/        `pnpm --dir frontend build` 产物
   web/index.html     无 static 时的遗留回退页
 servers/notes_mcp.py
-data/corpus/         离线资料
+skills/              SKILL.md（含 learn-agent 学习模式）
+data/corpus/         离线资料（含 agent-*.md 工程提纲）
 evals/golden.yaml
 ```
 
@@ -61,7 +74,7 @@ set OPENAI_BASE_URL=https://api.deepseek.com
 set KNOWHOW_CHAT_MODEL=deepseek-chat
 ```
 
-`KNOWHOW_MCP_ENABLED=true` 时，工具改为拉起 `config/mcp.yaml` 里的 stdio 服务，而不是内置 `lookup_note`。
+`KNOWHOW_MCP_ENABLED=true` 时，工具改为拉起 `config/mcp.yaml` 里的 stdio 服务，而不是内置静态工具。
 
 `LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback；`LANGFUSE_HOST` 指向你的 Langfuse 实例（自建或 cloud）。Eval 给有 trace id 的用例写 boolean score `case_pass`。UI 在回答下方提供「有用 / 没用」，写入 `user_feedback` score。
 

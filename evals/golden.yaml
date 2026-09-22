@@ -62,3 +62,13 @@ cases:
     expect_action: answer
     expect_answer_contains: 阿花
     thread_id: mem-pending-d
+  - id: learn-agent-skill
+    question: 教我长期记忆怎么工作
+    expect_action: tool
+    expect_tool: learn_agent
+    expect_answer_contains: 长期记忆
+  - id: learn-corpus-retrieve
+    question: pending 晋升 active 记忆与 RAG 分离
+    expect_action: retrieve
+    expect_source: agent-memory.md
+    clear_memories: true
