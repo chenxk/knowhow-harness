@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("eval", help="跑 evals/golden.yaml")
     sub.add_parser("graph", help="打印 LangGraph mermaid")
 
-    serve_parser = sub.add_parser("serve", help="启动测试台")
+    serve_parser = sub.add_parser("serve", help="启动工作台")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8765)
 

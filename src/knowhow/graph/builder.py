@@ -13,6 +13,7 @@ from knowhow.policy import Decider
 from knowhow.rag.store import VectorStore
 from knowhow.respond import Responder
 from knowhow.tools.catalog import ToolCatalog
+from knowhow.types import ChatMessage, message_text
 
 
 def build_graph(
@@ -22,12 +23,15 @@ def build_graph(
     catalog: ToolCatalog,
     responder: Responder,
     top_k: int,
+    history_turns: int = 12,
 ) -> CompiledStateGraph:
     """Compile the runtime graph with an in-memory checkpoint."""
 
     async def decide(state: GraphState) -> dict[str, object]:
         question = _last_human(state)
-        decision = await decider.decide(question)
+        history = _prior_chat(state, limit=history_turns)
+        memories = list(state.get("memories") or [])
+        decision = await decider.decide(question, history=history, memories=memories)
         return {
             "action": decision.action,
             "query": decision.query or question,
@@ -56,6 +60,8 @@ def build_graph(
     async def respond(state: GraphState) -> dict[str, object]:
         parts: list[str] = []
         writer = get_stream_writer()
+        history = _prior_chat(state, limit=history_turns)
+        memories = list(state.get("memories") or [])
         async for delta in responder.astream(
             question=_last_human(state),
             query=state["query"],
@@ -63,6 +69,8 @@ def build_graph(
             sources=state["sources"],
             tool_output=state["tool_output"],
             guidance=state["guidance"],
+            history=history,
+            memories=memories,
         ):
             parts.append(delta)
             writer({"text": delta})
@@ -95,3 +103,20 @@ def _last_human(state: GraphState) -> str:
             content = message.content
             return content if isinstance(content, str) else str(content)
     raise ValueError("graph state has no human message")
+
+
+def _prior_chat(state: GraphState, *, limit: int) -> list[ChatMessage]:
+    """User/assistant turns before the current question, truncated to `limit`."""
+    rows: list[ChatMessage] = []
+    for message in state["messages"]:
+        if isinstance(message, HumanMessage):
+            rows.append(ChatMessage(role="user", content=message_text(message.content)))
+        elif isinstance(message, AIMessage):
+            rows.append(
+                ChatMessage(role="assistant", content=message_text(message.content))
+            )
+    if rows and rows[-1].role == "user":
+        rows = rows[:-1]
+    if limit > 0:
+        return rows[-limit:]
+    return rows

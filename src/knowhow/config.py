@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     corpus_dir: Path = Path("data/corpus")
     skills_dir: Path = Path("skills")
     golden_path: Path = Path("evals/golden.yaml")
+    sessions_dir: Path = Path(".knowhow/sessions")
+    memory_path: Path = Path(".knowhow/memory.sqlite")
+    history_turns: int = 12
+    memory_top_k: int = 4
+    memory_dedupe_threshold: float = 0.82
     top_k: int = 4
     retrieve_threshold: float = 0.12
     langfuse_public_key: str = Field(
@@ -82,6 +87,14 @@ class Settings(BaseSettings):
     @property
     def golden_file(self) -> Path:
         return _resolve(self.golden_path)
+
+    @property
+    def sessions_path(self) -> Path:
+        return _resolve(self.sessions_dir)
+
+    @property
+    def memory_file(self) -> Path:
+        return _resolve(self.memory_path)
 
     def check(self) -> None:
         """Fail at startup when a selected mode points at missing config."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from knowhow.rag.store import VectorStore
 from knowhow.skills import Skill, guidance_for
 from knowhow.tools.catalog import ToolCatalog
-from knowhow.types import Decision, message_text
+from knowhow.types import ChatMessage, Decision, message_text
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.DOTALL)
 
@@ -25,6 +25,7 @@ _ROUTER_SYSTEM = """你是运行时路由器。只输出一个 JSON 对象，不
 可用工具：{tools}
 技能：{skills}
 问到技能描述的事情时，action 用 tool，tool_name 用该技能的工具名。
+用户个人偏好或档案类问题优先用 answer，并结合提供的长期记忆。
 """
 
 
@@ -41,7 +42,13 @@ class Chat(Protocol):
 class Decider(Protocol):
     """Map a user question to the next graph branch."""
 
-    async def decide(self, question: str) -> Decision:
+    async def decide(
+        self,
+        question: str,
+        *,
+        history: Sequence[ChatMessage] = (),
+        memories: Sequence[str] = (),
+    ) -> Decision:
         """Return the branch and any tool arguments."""
 
 
@@ -61,11 +68,19 @@ class ScriptedDecider:
         self._skills = skills
         self._threshold = threshold
 
-    async def decide(self, question: str) -> Decision:
-        folded = question.lower()
+    async def decide(
+        self,
+        question: str,
+        *,
+        history: Sequence[ChatMessage] = (),
+        memories: Sequence[str] = (),
+    ) -> Decision:
+        del memories
+        probe = _followup_probe(question, history)
+        folded = probe.lower()
         for name in self._catalog.names():
-            if name in question:
-                topic = question.replace(name, "").strip(" :：") or question
+            if name in question or name in probe:
+                topic = probe.replace(name, "").strip(" :：") or probe
                 args = {"topic": topic} if name == "lookup_note" else {}
                 return Decision(
                     action="tool",
@@ -78,14 +93,14 @@ class ScriptedDecider:
             if any(trigger.lower() in folded for trigger in skill.triggers):
                 return Decision(
                     action="tool",
-                    query=question,
+                    query=probe,
                     tool_name=skill.tool,
                     guidance=skill.body,
                 )
-        hits = self._store.search(question, k=1)
+        hits = self._store.search(probe, k=1)
         if hits and hits[0].score >= self._threshold:
-            return Decision(action="retrieve", query=question)
-        return Decision(action="answer", query=question)
+            return Decision(action="retrieve", query=probe)
+        return Decision(action="answer", query=probe)
 
 
 class ModelDecider:
@@ -96,13 +111,19 @@ class ModelDecider:
         self._catalog = catalog
         self._skills = skills
 
-    async def decide(self, question: str) -> Decision:
+    async def decide(
+        self,
+        question: str,
+        *,
+        history: Sequence[ChatMessage] = (),
+        memories: Sequence[str] = (),
+    ) -> Decision:
         tools = ", ".join(self._catalog.names()) or "(none)"
         skills = _skill_catalog(self._skills)
         message = await self._chat.ainvoke(
             [
                 SystemMessage(content=_ROUTER_SYSTEM.format(tools=tools, skills=skills)),
-                HumanMessage(content=question),
+                HumanMessage(content=_router_user(question, history, memories)),
             ]
         )
         decision = parse_decision(
@@ -149,3 +170,38 @@ def _skill_catalog(skills: list[Skill]) -> str:
     if not skills:
         return "(none)"
     return "\n".join(f"- {skill.name}: {skill.description} → {skill.tool}" for skill in skills)
+
+
+def _router_user(
+    question: str,
+    history: Sequence[ChatMessage],
+    memories: Sequence[str] = (),
+) -> str:
+    from knowhow.memory import format_memories
+
+    parts: list[str] = []
+    memory_block = format_memories(memories)
+    if memory_block:
+        parts.append(memory_block)
+    if history:
+        parts.append(f"对话历史：\n{_format_history(history)}")
+    parts.append(f"当前问题：{question}" if parts else question)
+    return "\n\n".join(parts)
+
+
+def _followup_probe(question: str, history: Sequence[ChatMessage]) -> str:
+    """Expand short follow-ups with the previous user turn for offline routing."""
+    if not history or len(question.strip()) >= 24:
+        return question
+    prior = [item.content for item in history if item.role == "user"]
+    if not prior:
+        return question
+    return f"{prior[-1]} {question}".strip()
+
+
+def _format_history(history: Sequence[ChatMessage]) -> str:
+    lines: list[str] = []
+    for item in history:
+        label = "用户" if item.role == "user" else "助手"
+        lines.append(f"{label}: {item.content}")
+    return "\n".join(lines)

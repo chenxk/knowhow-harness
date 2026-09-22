@@ -20,6 +20,7 @@ class GraphState(TypedDict):
     tool_args: dict[str, str]
     tool_output: str
     guidance: str
+    memories: list[str]
 
 
 Branch = Literal["retrieve", "act", "respond"]

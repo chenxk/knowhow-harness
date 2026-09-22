@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Knowhow 测试台</title>
+  <title>Knowhow 工作台</title>
   <style>
     :root {
       --paper: #f3ecdf;
@@ -165,6 +165,59 @@
     }
 
     .row button { flex: 1; }
+
+    .session-toolbar {
+      display: grid;
+      gap: 8px;
+    }
+
+    #session-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .session-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: start;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: white;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .session-item.active {
+      border-color: var(--ink);
+      background: #fffaf2;
+    }
+
+    .session-item .title {
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .session-item .when {
+      margin-top: 4px;
+      color: var(--muted);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 11px;
+    }
+
+    .session-item .ops {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .session-item .ops button {
+      padding: 4px 6px;
+      font-size: 11px;
+    }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
@@ -374,25 +427,24 @@
     <div class="brand">
       <div class="mark">KH</div>
       <div>
-        <h1>测试台</h1>
-        <p class="sub">同一线程里看路由、来源和工具结果</p>
+        <h1>工作台</h1>
+        <p class="sub">会话持久化 · 看路由、来源和工具结果</p>
       </div>
     </div>
     <div class="facts" id="facts"></div>
   </header>
   <div class="layout">
     <aside>
-      <label for="thread">线程</label>
-      <input id="thread" value="web" autocomplete="off" />
-      <div class="row">
-        <button type="button" class="secondary" id="new-thread">新线程</button>
+      <div class="session-toolbar">
+        <button type="button" id="new-session">新对话</button>
         <button type="button" class="secondary" id="run-eval">跑黄金集</button>
       </div>
+      <div id="session-list"></div>
       <div class="chips" id="chips"></div>
       <div id="eval"></div>
     </aside>
     <section class="desk">
-      <div id="transcript"><p class="empty">写下一个问题。线程会记住这一轮。</p></div>
+      <div id="transcript"><p class="empty">写下一个问题。会话会保存在本机。</p></div>
       <p id="error"></p>
       <form id="composer">
         <textarea id="question" placeholder="例如：如何重置密码"></textarea>
@@ -406,9 +458,11 @@
     const transcript = document.querySelector("#transcript");
     const error = document.querySelector("#error");
     const question = document.querySelector("#question");
-    const thread = document.querySelector("#thread");
     const send = document.querySelector("#send");
+    const sessionList = document.querySelector("#session-list");
     let log = [];
+    let sessions = [];
+    let currentSessionId = "";
     let tracingOn = false;
 
     samples.forEach((text) => {
@@ -420,13 +474,7 @@
       document.querySelector("#chips").append(button);
     });
 
-    document.querySelector("#new-thread").addEventListener("click", () => {
-      thread.value = "web-" + Math.random().toString(36).slice(2, 6);
-      log = [];
-      render();
-      document.querySelector("#eval").replaceChildren();
-      showError("");
-    });
+    document.querySelector("#new-session").addEventListener("click", () => createSession());
 
     document.querySelector("#run-eval").addEventListener("click", async () => {
       showError("");
@@ -465,7 +513,17 @@
       }
     });
 
-    loadMeta();
+    boot();
+
+    async function boot() {
+      await loadMeta();
+      await refreshSessions();
+      if (!sessions.length) {
+        await createSession(false);
+        return;
+      }
+      await selectSession(sessions[0].id);
+    }
 
     async function loadMeta() {
       const response = await fetch("/api/meta");
@@ -480,10 +538,162 @@
       });
     }
 
+    async function refreshSessions() {
+      const response = await fetch("/api/sessions");
+      sessions = await response.json();
+      renderSessions();
+    }
+
+    function renderSessions() {
+      sessionList.replaceChildren();
+      if (!sessions.length) {
+        const empty = document.createElement("div");
+        empty.className = "when";
+        empty.textContent = "还没有会话";
+        sessionList.append(empty);
+        return;
+      }
+      sessions.forEach((session) => {
+        const item = document.createElement("div");
+        item.className = "session-item" + (session.id === currentSessionId ? " active" : "");
+        const main = document.createElement("button");
+        main.type = "button";
+        main.className = "secondary";
+        main.style.border = "none";
+        main.style.background = "transparent";
+        main.style.padding = "0";
+        main.style.textAlign = "left";
+        main.style.width = "100%";
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = session.title || "新对话";
+        const when = document.createElement("div");
+        when.className = "when";
+        when.textContent = formatWhen(session.updated_at);
+        main.append(title, when);
+        main.addEventListener("click", () => selectSession(session.id));
+        const ops = document.createElement("div");
+        ops.className = "ops";
+        const rename = document.createElement("button");
+        rename.type = "button";
+        rename.className = "secondary";
+        rename.textContent = "改名";
+        rename.addEventListener("click", (event) => {
+          event.stopPropagation();
+          renameSession(session);
+        });
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "secondary";
+        remove.textContent = "删除";
+        remove.addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteSession(session.id);
+        });
+        ops.append(rename, remove);
+        item.append(main, ops);
+        sessionList.append(item);
+      });
+    }
+
+    function formatWhen(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    async function createSession(select = true) {
+      showError("");
+      const response = await fetch("/api/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await response.json();
+      if (!response.ok) {
+        showError(detail(data));
+        return;
+      }
+      await refreshSessions();
+      if (select) await selectSession(data.id);
+    }
+
+    async function selectSession(sessionId) {
+      if (!sessionId) return;
+      showError("");
+      const response = await fetch("/api/sessions/" + encodeURIComponent(sessionId));
+      const data = await response.json();
+      if (!response.ok) {
+        showError(detail(data));
+        return;
+      }
+      currentSessionId = data.id;
+      log = (data.messages || []).map((message) => ({
+        role: message.role,
+        content: message.content || "",
+        action: message.action || "",
+        sources: message.sources || [],
+        tool_name: message.tool_name || "",
+        trace_id: message.trace_id || null,
+        pending: false,
+      }));
+      renderSessions();
+      render();
+      question.focus();
+    }
+
+    async function renameSession(session) {
+      const next = window.prompt("会话标题", session.title || "新对话");
+      if (next === null) return;
+      const title = next.trim();
+      if (!title) {
+        showError("标题不能为空");
+        return;
+      }
+      const response = await fetch("/api/sessions/" + encodeURIComponent(session.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        showError(detail(data));
+        return;
+      }
+      await refreshSessions();
+    }
+
+    async function deleteSession(sessionId) {
+      if (!window.confirm("删除这个会话？")) return;
+      const response = await fetch("/api/sessions/" + encodeURIComponent(sessionId), { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json();
+        showError(detail(data));
+        return;
+      }
+      if (currentSessionId === sessionId) {
+        currentSessionId = "";
+        log = [];
+        render();
+      }
+      await refreshSessions();
+      if (!sessions.length) {
+        await createSession();
+        return;
+      }
+      if (!currentSessionId) await selectSession(sessions[0].id);
+    }
+
     async function ask(text) {
       const content = text.trim();
       if (!content) {
         showError("问题不能为空");
+        return;
+      }
+      if (!currentSessionId) {
+        showError("请先创建会话");
         return;
       }
       showError("");
@@ -495,7 +705,7 @@
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: content, thread_id: thread.value.trim() || "web" }),
+          body: JSON.stringify({ question: content, session_id: currentSessionId }),
         });
         if (!response.ok) {
           const data = await response.json();
@@ -506,6 +716,7 @@
         }
         question.value = "";
         await readStream(response);
+        await refreshSessions();
       } catch (err) {
         showError("请求失败");
       } finally {
@@ -561,6 +772,15 @@
         paintAssistant(turn);
         return;
       }
+      if (event.type === "session") {
+        const row = sessions.find((item) => item.id === event.id);
+        if (row) {
+          row.title = event.title;
+          row.updated_at = event.updated_at;
+          renderSessions();
+        }
+        return;
+      }
       if (event.type === "status" || event.type === "done") {
         turn.action = event.action || turn.action;
         turn.sources = event.sources || [];
@@ -584,7 +804,7 @@
       if (!log.length) {
         const empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = "写下一个问题。线程会记住这一轮。";
+        empty.textContent = "写下一个问题。会话会保存在本机。";
         transcript.append(empty);
         return;
       }

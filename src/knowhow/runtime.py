@@ -92,15 +92,23 @@ class Runtime:
             trace_id=done.trace_id,
         )
 
-    async def stream(self, question: str, *, thread_id: str) -> AsyncIterator[StreamEvent]:
+    async def stream(
+        self,
+        question: str,
+        *,
+        thread_id: str,
+        history: list[ChatMessage] | None = None,
+    ) -> AsyncIterator[StreamEvent]:
         """Yield routing status, then answer text as the model produces it."""
         callbacks = self.tracer.callbacks()
         action: Action = "answer"
         sources: list[str] = []
         tool_name = ""
+        config = _run_config(thread_id, callbacks)
+        state = await self._start_state(question, thread_id=thread_id, history=history)
         async for item in self.graph.astream(
-            _initial_state(question),
-            _run_config(thread_id, callbacks),
+            state,
+            config,
             stream_mode=["updates", "custom"],
         ):
             if not isinstance(item, tuple) or len(item) != 2:
@@ -150,6 +158,24 @@ class Runtime:
             messages.append(ChatMessage(role=role, content=message_text(message.content)))
         return messages
 
+    async def _start_state(
+        self,
+        question: str,
+        *,
+        thread_id: str,
+        history: list[ChatMessage] | None,
+    ) -> GraphState:
+        """Seed prior turns when the in-memory checkpoint is empty."""
+        snapshot = await self.graph.aget_state({"configurable": {"thread_id": thread_id}})
+        values = snapshot.values if isinstance(snapshot.values, dict) else {}
+        existing = values.get("messages") or []
+        if existing:
+            return _initial_state(question)
+        prior = history or []
+        if self.settings.history_turns > 0:
+            prior = prior[-self.settings.history_turns :]
+        return _seeded_state(prior, question)
+
 
 async def build_runtime(settings: Settings | None = None) -> Runtime:
     """Check settings, index the corpus, and compile the graph."""
@@ -192,6 +218,7 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
         catalog=catalog,
         responder=responder,
         top_k=resolved.top_k,
+        history_turns=resolved.history_turns,
     )
     return Runtime(
         settings=resolved,
@@ -250,6 +277,27 @@ def _as_action(value: object, fallback: Action) -> Action:
 def _initial_state(question: str) -> GraphState:
     return {
         "messages": [HumanMessage(content=question)],
+        "action": "answer",
+        "query": question,
+        "context": [],
+        "sources": [],
+        "tool_name": "",
+        "tool_args": {},
+        "tool_output": "",
+        "guidance": "",
+    }
+
+
+def _seeded_state(history: list[ChatMessage], question: str) -> GraphState:
+    messages: list[HumanMessage | AIMessage] = []
+    for item in history:
+        if item.role == "user":
+            messages.append(HumanMessage(content=item.content))
+        else:
+            messages.append(AIMessage(content=item.content))
+    messages.append(HumanMessage(content=question))
+    return {
+        "messages": messages,
         "action": "answer",
         "query": question,
         "context": [],

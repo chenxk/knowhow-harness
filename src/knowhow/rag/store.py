@@ -23,7 +23,7 @@ class Hit:
 
 
 class VectorStore(Protocol):
-    """Add and search chunks. The demo store is synchronous and in-process."""
+    """Add and search chunks. The default store is synchronous and in-process."""
 
     def add(self, chunks: list[Chunk]) -> None:
         """Index chunks. Later ids with the same `id` replace earlier ones."""

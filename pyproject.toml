@@ -1,7 +1,7 @@
 [project]
 name = "knowhow-harness"
 version = "0.1.0"
-description = "Agent runtime demo: LangGraph, MCP, RAG, eval, and Langfuse."
+description = "Personal usable agent runtime: LangGraph, MCP, RAG, memory, eval, and Langfuse."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
