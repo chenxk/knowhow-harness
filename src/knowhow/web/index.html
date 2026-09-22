@@ -154,7 +154,9 @@
       color: var(--ink);
     }
 
-    button:disabled { opacity: 0.45; cursor: wait; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.busy:disabled { cursor: wait; }
+    .feedback button:disabled { cursor: default; opacity: 1; }
 
     .row {
       display: flex;
@@ -311,6 +313,31 @@
       font-size: 12px;
     }
 
+    .feedback {
+      display: none;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+
+    .feedback.open { display: flex; }
+
+    .feedback button {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .feedback button.active {
+      background: var(--retrieve);
+      border-color: var(--retrieve);
+      color: white;
+    }
+
+    .feedback .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     form {
       flex: none;
       display: grid;
@@ -382,6 +409,7 @@
     const thread = document.querySelector("#thread");
     const send = document.querySelector("#send");
     let log = [];
+    let tracingOn = false;
 
     samples.forEach((text) => {
       const button = document.createElement("button");
@@ -413,7 +441,8 @@
       }
       box.replaceChildren();
       const summary = document.createElement("div");
-      summary.textContent = data.passed + " 通过，" + data.failed + " 失败";
+      summary.textContent = data.passed + " 通过，" + data.failed + " 失败"
+        + (data.scored ? " · 已写 Langfuse score" : "");
       box.append(summary);
       data.rows.forEach((row) => {
         const line = document.createElement("div");
@@ -441,6 +470,7 @@
     async function loadMeta() {
       const response = await fetch("/api/meta");
       const data = await response.json();
+      tracingOn = Boolean(data.tracing);
       const facts = document.querySelector("#facts");
       ["mode " + data.mode, "chunks " + data.corpus_chunks, "tools " + data.tools.join(","), "skills " + data.skills.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
         const item = document.createElement("span");
@@ -458,6 +488,7 @@
       }
       showError("");
       send.disabled = true;
+      send.classList.add("busy");
       log.push({ role: "user", content });
       render();
       try {
@@ -478,6 +509,7 @@
       } catch (err) {
         showError("请求失败");
       } finally {
+        send.classList.remove("busy");
         send.disabled = false;
         question.focus();
       }
@@ -595,10 +627,56 @@
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.hidden = true;
+      const feedback = document.createElement("div");
+      feedback.className = "feedback";
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "secondary";
+      up.textContent = "有用";
+      const down = document.createElement("button");
+      down.type = "button";
+      down.className = "secondary";
+      down.textContent = "没用";
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      feedback.append(up, down, hint);
       bubble.append(stamp, body);
-      article.append(who, bubble, meta);
+      article.append(who, bubble, meta, feedback);
       transcript.append(article);
-      turn.node = { article, stamp, body, meta };
+      turn.node = { article, stamp, body, meta, feedback, up, down, hint };
+      up.addEventListener("click", () => sendFeedback(turn, 1));
+      down.addEventListener("click", () => sendFeedback(turn, 0));
+    }
+
+    async function sendFeedback(turn, value) {
+      if (!turn.trace_id || turn.feedback === value) return;
+      showError("");
+      turn.node.up.disabled = true;
+      turn.node.down.disabled = true;
+      try {
+        const response = await fetch("/api/scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            trace_id: turn.trace_id,
+            value,
+            comment: value ? "thumbs up" : "thumbs down",
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          showError(detail(data));
+          turn.node.up.disabled = false;
+          turn.node.down.disabled = false;
+          return;
+        }
+        turn.feedback = value;
+        paintAssistant(turn);
+      } catch (err) {
+        showError("score 写入失败");
+        turn.node.up.disabled = false;
+        turn.node.down.disabled = false;
+      }
     }
 
     function renderMarkdown(source) {
@@ -733,6 +811,15 @@
       if (turn.trace_id) bits.push("trace " + turn.trace_id);
       node.meta.hidden = bits.length === 0;
       node.meta.textContent = bits.join("  ·  ");
+      const canScore = tracingOn && Boolean(turn.trace_id) && !turn.pending;
+      node.feedback.classList.toggle("open", canScore);
+      node.up.classList.toggle("active", turn.feedback === 1);
+      node.down.classList.toggle("active", turn.feedback === 0);
+      node.up.disabled = turn.feedback !== undefined;
+      node.down.disabled = turn.feedback !== undefined;
+      node.hint.textContent = turn.feedback === undefined
+        ? "写回 Langfuse score"
+        : (turn.feedback === 1 ? "已标有用" : "已标没用");
       follow(Boolean(turn.pending));
     }
 

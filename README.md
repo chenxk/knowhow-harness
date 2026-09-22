@@ -49,7 +49,7 @@ set KNOWHOW_CHAT_MODEL=deepseek-chat
 
 `KNOWHOW_MCP_ENABLED=true` 时，工具改为拉起 `config/mcp.yaml` 里的 stdio 服务，而不是内置 `lookup_note`。
 
-`LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback。Eval 只给已经产生 trace id 的用例写 `case_pass`。
+`LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback；`LANGFUSE_HOST` 指向你的 Langfuse 实例（自建或 cloud）。Eval 给有 trace id 的用例写 boolean score `case_pass`。测试台在回答下方提供「有用 / 没用」，写入 `user_feedback` score。
 
 ## 边界
 

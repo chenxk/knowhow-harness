@@ -39,6 +39,31 @@ class Tracer:
 
         get_client().flush()
 
+    def score(
+        self,
+        *,
+        name: str,
+        value: float,
+        trace_id: str,
+        comment: str = "",
+    ) -> None:
+        """Attach one score to an existing Langfuse trace and flush."""
+        if not self.enabled:
+            raise RuntimeError("未启用 Langfuse，无法写 score")
+        if not trace_id.strip():
+            raise RuntimeError("缺少 trace id")
+        self._ensure_client()
+        from langfuse import get_client
+
+        get_client().create_score(
+            name=name,
+            value=value,
+            trace_id=trace_id,
+            data_type="BOOLEAN",
+            comment=comment or None,
+        )
+        get_client().flush()
+
     def _ensure_client(self) -> None:
         if self._ready:
             return

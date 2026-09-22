@@ -45,6 +45,20 @@ class EvalOut(BaseModel):
     passed: int
     failed: int
     rows: list[EvalRowOut]
+    scored: bool = False
+
+
+class ScoreIn(BaseModel):
+    trace_id: str = Field(min_length=8, max_length=128)
+    value: float = Field(ge=0, le=1)
+    comment: str = Field(default="", max_length=500)
+
+
+class ScoreOut(BaseModel):
+    ok: bool
+    name: str
+    value: float
+    trace_id: str
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
@@ -108,13 +122,15 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
     async def evaluate() -> EvalOut:
         current: Runtime = app.state.runtime
         cases = load_golden(current.settings.golden_file.read_text(encoding="utf-8"))
-        sink = LangfuseScoreSink() if current.tracer.enabled else NullScoreSink()
+        scored = current.tracer.enabled
+        sink = LangfuseScoreSink() if scored else NullScoreSink()
         async with app.state.lock:
             report = await run_eval(current, cases, sink)
             current.tracer.flush()
         return EvalOut(
             passed=report.passed,
             failed=report.failed,
+            scored=scored,
             rows=[
                 EvalRowOut(
                     case_id=row.case_id,
@@ -124,6 +140,27 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 )
                 for row in report.rows
             ],
+        )
+
+    @app.post("/api/scores", response_model=ScoreOut)
+    async def score(body: ScoreIn) -> ScoreOut:
+        current: Runtime = app.state.runtime
+        if not current.tracer.enabled:
+            raise HTTPException(status_code=400, detail="未启用 Langfuse，无法写 score")
+        try:
+            current.tracer.score(
+                name="user_feedback",
+                value=body.value,
+                trace_id=body.trace_id.strip(),
+                comment=body.comment.strip(),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return ScoreOut(
+            ok=True,
+            name="user_feedback",
+            value=body.value,
+            trace_id=body.trace_id.strip(),
         )
 
     return app

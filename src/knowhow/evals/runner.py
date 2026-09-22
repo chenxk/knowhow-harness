@@ -57,7 +57,7 @@ class NullScoreSink:
 
 
 class LangfuseScoreSink:
-    """Write one numeric `case_pass` score per case that has a trace id."""
+    """Write one boolean `case_pass` score per case that has a trace id."""
 
     def record(self, report: EvalReport) -> None:
         from langfuse import get_client
@@ -66,10 +66,15 @@ class LangfuseScoreSink:
         for row in report.rows:
             if not row.trace_id:
                 continue
+            comment = row.case_id
+            if row.failures:
+                comment = f"{row.case_id}: {'; '.join(row.failures)}"
             client.create_score(
                 name="case_pass",
                 value=1.0 if row.passed else 0.0,
                 trace_id=row.trace_id,
+                data_type="BOOLEAN",
+                comment=comment,
             )
         client.flush()
 

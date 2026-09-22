@@ -70,7 +70,17 @@ def test_blank_question_is_rejected(client: TestClient) -> None:
     assert response.json()["detail"] == "问题不能为空"
 
 
+def test_score_requires_tracing(client: TestClient) -> None:
+    response = client.post(
+        "/api/scores",
+        json={"trace_id": "0123456789abcdef", "value": 1, "comment": "thumbs up"},
+    )
+    assert response.status_code == 400
+    assert "Langfuse" in response.json()["detail"]
+
+
 def test_eval_endpoint_passes_golden_set(client: TestClient) -> None:
     body = client.post("/api/eval").json()
     assert body["failed"] == 0
     assert body["passed"] == 4
+    assert body["scored"] is False
