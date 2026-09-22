@@ -142,7 +142,7 @@ def test_score_requires_tracing(client: TestClient) -> None:
 def test_eval_endpoint_passes_golden_set(client: TestClient) -> None:
     body = client.post("/api/eval").json()
     assert body["failed"] == 0
-    assert body["passed"] == 7
+    assert body["passed"] == 12
     assert body["scored"] is False
 
 
@@ -158,9 +158,34 @@ def test_memories_list_and_delete(client: TestClient) -> None:
     rows = client.get("/api/memories").json()
     assert any("绿茶" in row["content"] for row in rows)
     memory_id = next(row["id"] for row in rows if "绿茶" in row["content"])
+    assert next(row for row in rows if row["id"] == memory_id)["status"] == "active"
     deleted = client.delete(f"/api/memories/{memory_id}")
     assert deleted.status_code == 200
     assert all("绿茶" not in row["content"] for row in client.get("/api/memories").json())
+
+
+def test_memories_promote_and_consolidate(client: TestClient) -> None:
+    session_id = client.post("/api/sessions", json={}).json()["id"]
+    _events(
+        client.post(
+            "/api/chat",
+            json={"question": "我叫阿花", "session_id": session_id},
+        ).text
+    )
+    rows = client.get("/api/memories").json()
+    pending = next(row for row in rows if "阿花" in row["content"])
+    assert pending["status"] == "pending"
+    promoted = client.post(f"/api/memories/{pending['id']}/promote")
+    assert promoted.status_code == 200
+    assert promoted.json()["status"] == "active"
+    other = client.post("/api/sessions", json={}).json()["id"]
+    consolidated = client.post(
+        "/api/memories/consolidate",
+        json={"session_id": session_id},
+    )
+    assert consolidated.status_code == 200
+    assert consolidated.json()["ok"] is True
+    assert other  # created successfully after consolidate hook path
 
 
 def test_title_from_text_truncates() -> None:

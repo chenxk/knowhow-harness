@@ -182,6 +182,24 @@ button {
   border: 1px solid transparent;
 }
 
+.memory-row.pending {
+  border-color: rgba(180, 140, 60, 0.28);
+  background: rgba(180, 140, 60, 0.06);
+}
+
+.memory-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+
+.panel-label.subtle {
+  margin-top: 10px;
+  opacity: 0.75;
+  letter-spacing: 0.08em;
+}
+
 .session-row:hover,
 .memory-row:hover {
   background: rgba(255, 255, 255, 0.03);

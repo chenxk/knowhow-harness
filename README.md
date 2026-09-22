@@ -28,7 +28,7 @@ data/corpus/         离线资料
 evals/golden.yaml
 ```
 
-从仓库根目录执行命令。`knowhow serve` 在 `http://127.0.0.1:8765` 同时提供 API 与 UI（需先 `pnpm --dir frontend build`）。开发时可用 Vite：`pnpm --dir frontend dev`（代理 `/api` → `:8765`）。回答通过 SSE 逐段推到页面。左侧会话列表与全文消息落在 `.knowhow/sessions/`（可用 `KNOWHOW_SESSIONS_DIR` 改路径），进程重启后仍可切换；标题默认截取首条用户消息。多轮追问会把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给路由和回答。长期记忆默认写在 `.knowhow/memory.sqlite`（`KNOWHOW_MEMORY_PATH`），侧栏可列表/删除；说「请记住：…」会立刻写入，其它事实在回合后抽取，不进 `data/corpus`。
+从仓库根目录执行命令。`knowhow serve` 在 `http://127.0.0.1:8765` 同时提供 API 与 UI（需先 `pnpm --dir frontend build`）。开发时可用 Vite：`pnpm --dir frontend dev`（代理 `/api` → `:8765`）。回答通过 SSE 逐段推到页面。左侧会话列表与全文消息落在 `.knowhow/sessions/`（可用 `KNOWHOW_SESSIONS_DIR` 改路径），进程重启后仍可切换；标题默认截取首条用户消息。多轮追问会把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给路由和回答。长期记忆默认写在 `.knowhow/memory.sqlite`（`KNOWHOW_MEMORY_PATH`）：自动抽取进 **pending**，说「请记住：…」、同一事实重复达到 `KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）、或侧栏点「确认记住」后升为 **active**（仅 active 参与回答召回）；切换/新建会话会 consolidate。侧栏可列表/删除/确认；记忆不进 `data/corpus`。
 
 ## 命令
 

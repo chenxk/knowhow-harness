@@ -29,5 +29,5 @@ Knowhow Harness 是一个个人可用的本地 Agent Runtime。命令从仓库�
 - 离线黄金集在 `evals/golden.yaml`。改路由或语料时同步改它，并跑 `uv run pytest`。
 - 用户可见的 CLI 文案用中文。代码标识符用英文。
 - 会话默认写在 `KNOWHOW_SESSIONS_DIR`（默认 `.knowhow/sessions/`）。多轮把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给 decide/respond。
-- 长期记忆默认落在 `KNOWHOW_MEMORY_PATH`（`.knowhow/memory.sqlite`）。开跑前 Top-K 注入 decide/respond；回合结束后异步抽取（`请记住` 同步写入）。只存原子事实，不把整段聊天当记忆，也不写入 `data/corpus`。
+- 长期记忆默认落在 `KNOWHOW_MEMORY_PATH`（`.knowhow/memory.sqlite`）。开跑前只把 **active** 记忆 Top-K 注入 decide/respond；自动抽取先写入 **pending**，满足「请记住」/重复 ≥`KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）/侧栏「确认记住」后晋升为 active。切换或新建会话时会 consolidate 一次。只存原子事实，不把整段聊天当记忆，也不写入 `data/corpus`。
 - 改 UI：在 `frontend/` 用 `pnpm`；生产构建进 `src/knowhow/web/static/`，由 `knowhow serve` 在 `/` 提供。

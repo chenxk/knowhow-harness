@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  consolidateMemories,
   createSession,
   deleteSession,
   getSession,
@@ -24,7 +25,7 @@ async function resolveInitialSessionId(): Promise<string> {
   return bootOnce
 }
 
-export function useWorkspace() {
+export function useWorkspace(onMemoriesMaybeChanged?: () => void) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
@@ -33,6 +34,8 @@ export function useWorkspace() {
   const abortRef = useRef<AbortController | null>(null)
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
+  const onMemoriesRef = useRef(onMemoriesMaybeChanged)
+  onMemoriesRef.current = onMemoriesMaybeChanged
 
   const refreshSessions = useCallback(async () => {
     const rows = await listSessions()
@@ -40,7 +43,17 @@ export function useWorkspace() {
     return rows
   }, [])
 
-  const selectSession = useCallback(async (id: string) => {
+  const consolidateLeaving = useCallback(async (id: string) => {
+    if (!id) return
+    try {
+      await consolidateMemories(id)
+      onMemoriesRef.current?.()
+    } catch {
+      /* consolidate is best-effort on switch */
+    }
+  }, [])
+
+  const loadSession = useCallback(async (id: string) => {
     abortRef.current?.abort()
     abortRef.current = null
     setBusy(false)
@@ -60,11 +73,24 @@ export function useWorkspace() {
     )
   }, [])
 
+  const selectSession = useCallback(
+    async (id: string) => {
+      const prev = sessionIdRef.current
+      if (prev && prev !== id) {
+        await consolidateLeaving(prev)
+      }
+      await loadSession(id)
+    },
+    [consolidateLeaving, loadSession],
+  )
+
   const newSession = useCallback(async () => {
+    const prev = sessionIdRef.current
+    if (prev) await consolidateLeaving(prev)
     const session = await createSession()
     await refreshSessions()
-    await selectSession(session.id)
-  }, [refreshSessions, selectSession])
+    await loadSession(session.id)
+  }, [consolidateLeaving, loadSession, refreshSessions])
 
   const rename = useCallback(
     async (id: string, title: string) => {

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { deleteMemory, fetchMeta, listMemories, runEval } from './api/client'
+import {
+  deleteMemory,
+  fetchMeta,
+  listMemories,
+  promoteMemory,
+  runEval,
+} from './api/client'
 import type { MemoryItem, Meta } from './api/types'
 import { ChatTranscript } from './components/ChatTranscript'
 import { Composer } from './components/Composer'
@@ -8,7 +14,6 @@ import { Sidebar } from './components/Sidebar'
 import { useWorkspace } from './hooks/useWorkspace'
 
 export default function App() {
-  const workspace = useWorkspace()
   const [meta, setMeta] = useState<Meta | null>(null)
   const [memories, setMemories] = useState<MemoryItem[]>([])
   const [evalText, setEvalText] = useState('')
@@ -17,6 +22,10 @@ export default function App() {
   const refreshMemories = useCallback(async () => {
     setMemories(await listMemories())
   }, [])
+
+  const workspace = useWorkspace(() => {
+    void refreshMemories()
+  })
 
   useEffect(() => {
     ;(async () => {
@@ -48,6 +57,8 @@ export default function App() {
         }),
       ]
       setEvalText(lines.join('\n'))
+      await refreshMemories()
+      setMeta(await fetchMeta())
     } catch (err) {
       setEvalText('')
       workspace.setError(err instanceof Error ? err.message : '评测失败')
@@ -61,6 +72,16 @@ export default function App() {
       if (meta) setMeta({ ...meta, memory_count: Math.max(0, meta.memory_count - 1) })
     } catch (err) {
       workspace.setError(err instanceof Error ? err.message : '删除记忆失败')
+    }
+  }
+
+  async function handlePromoteMemory(id: string) {
+    try {
+      await promoteMemory(id)
+      await refreshMemories()
+      setMeta(await fetchMeta())
+    } catch (err) {
+      workspace.setError(err instanceof Error ? err.message : '确认记忆失败')
     }
   }
 
@@ -100,6 +121,7 @@ export default function App() {
           onRename={(id, title) => void workspace.rename(id, title)}
           onDelete={(id) => void workspace.remove(id)}
           onDeleteMemory={(id) => void handleDeleteMemory(id)}
+          onPromoteMemory={(id) => void handlePromoteMemory(id)}
           onEval={() => void handleEval()}
         />
 
