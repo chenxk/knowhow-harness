@@ -11,6 +11,7 @@ export function Sidebar({
   onRename,
   onDelete,
   onDeleteMemory,
+  onPromoteMemory,
   onEval,
 }: {
   sessions: SessionSummary[]
@@ -22,8 +23,12 @@ export function Sidebar({
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onDeleteMemory: (id: string) => void
+  onPromoteMemory: (id: string) => void
   onEval: () => void
 }) {
+  const active = memories.filter((item) => item.status === 'active')
+  const pending = memories.filter((item) => item.status === 'pending')
+
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
@@ -79,28 +84,71 @@ export function Sidebar({
       <div className="panel-label">长期记忆</div>
       <div className="memory-list">
         {!memories.length && <p className="quiet">还没有记忆</p>}
-        {memories.map((memory) => (
-          <div key={memory.id} className="memory-row">
-            <div>
-              <div className="memory-text">{memory.content}</div>
-              <div className="session-when">
-                {memory.category} · {formatWhen(memory.updated_at)}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="ghost tiny"
-              onClick={() => {
-                if (window.confirm('删除这条记忆？')) onDeleteMemory(memory.id)
-              }}
-            >
-              删除
-            </button>
-          </div>
+        {active.map((memory) => (
+          <MemoryRow
+            key={memory.id}
+            memory={memory}
+            onDelete={onDeleteMemory}
+          />
         ))}
+        {pending.length > 0 && (
+          <>
+            <div className="panel-label subtle">待确认</div>
+            {pending.map((memory) => (
+              <MemoryRow
+                key={memory.id}
+                memory={memory}
+                onDelete={onDeleteMemory}
+                onPromote={onPromoteMemory}
+              />
+            ))}
+          </>
+        )}
       </div>
 
       {evalText ? <pre className="eval-box">{evalText}</pre> : null}
     </aside>
+  )
+}
+
+function MemoryRow({
+  memory,
+  onDelete,
+  onPromote,
+}: {
+  memory: MemoryItem
+  onDelete: (id: string) => void
+  onPromote?: (id: string) => void
+}) {
+  const pending = memory.status === 'pending'
+  return (
+    <div className={`memory-row${pending ? ' pending' : ''}`}>
+      <div>
+        <div className="memory-text">{memory.content}</div>
+        <div className="session-when">
+          {pending ? '候选' : memory.category} · {formatWhen(memory.updated_at)}
+        </div>
+      </div>
+      <div className="memory-ops">
+        {onPromote ? (
+          <button
+            type="button"
+            className="ghost tiny"
+            onClick={() => onPromote(memory.id)}
+          >
+            确认记住
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="ghost tiny"
+          onClick={() => {
+            if (window.confirm('删除这条记忆？')) onDelete(memory.id)
+          }}
+        >
+          删除
+        </button>
+      </div>
+    </div>
   )
 }

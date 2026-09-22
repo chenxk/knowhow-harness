@@ -17,6 +17,9 @@ class EvalCase(BaseModel):
     expect_source: str = ""
     expect_tool: str = ""
     expect_answer_contains: str = ""
+    expect_memory_contains: str = ""
+    expect_memory_status: str = ""
+    expect_no_memory_contains: str = ""
     thread_id: str = ""
     clear_memories: bool = False
 
@@ -103,6 +106,7 @@ async def run_eval(
         thread_id = case.thread_id or f"eval-{case.id}"
         result = await runtime.run(case.question, thread_id=thread_id)
         failures = _failures(case, result.action, result.sources, result.tool_name, result.answer)
+        failures.extend(_memory_failures(case, runtime))
         rows.append(
             CaseResult(
                 case_id=case.id,
@@ -135,4 +139,23 @@ def _failures(
         failures.append(f"tool {tool_name} != {case.expect_tool}")
     if case.expect_answer_contains and case.expect_answer_contains not in answer:
         failures.append(f"answer missing {case.expect_answer_contains!r}")
+    return failures
+
+
+def _memory_failures(case: EvalCase, runtime: Runtime) -> list[str]:
+    failures: list[str] = []
+    items = runtime.memory.list()
+    if case.expect_memory_contains:
+        matched = [item for item in items if case.expect_memory_contains in item.content]
+        if not matched:
+            failures.append(f"memory missing {case.expect_memory_contains!r}")
+        elif case.expect_memory_status:
+            status = matched[0].status
+            if status != case.expect_memory_status:
+                failures.append(
+                    f"memory status {status} != {case.expect_memory_status}"
+                )
+    if case.expect_no_memory_contains:
+        if any(case.expect_no_memory_contains in item.content for item in items):
+            failures.append(f"unexpected memory {case.expect_no_memory_contains!r}")
     return failures

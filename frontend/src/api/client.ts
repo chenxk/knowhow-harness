@@ -59,6 +59,24 @@ export async function listMemories(): Promise<MemoryItem[]> {
   return readJson(await fetch('/api/memories'))
 }
 
+export async function promoteMemory(memoryId: string): Promise<MemoryItem> {
+  return readJson(
+    await fetch(`/api/memories/${encodeURIComponent(memoryId)}/promote`, {
+      method: 'POST',
+    }),
+  )
+}
+
+export async function consolidateMemories(sessionId: string): Promise<void> {
+  await readJson(
+    await fetch('/api/memories/consolidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  )
+}
+
 export async function deleteMemory(memoryId: string): Promise<void> {
   await readJson(
     await fetch(`/api/memories/${encodeURIComponent(memoryId)}`, { method: 'DELETE' }),

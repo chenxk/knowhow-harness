@@ -18,6 +18,8 @@ cases:
     question: 请记住：我叫小明
     expect_action: answer
     expect_answer_contains: 记住
+    expect_memory_contains: 小明
+    expect_memory_status: active
     thread_id: mem-a
     clear_memories: true
   - id: memory-recall
@@ -31,3 +33,32 @@ cases:
     expect_answer_contains: 没有检索到资料
     thread_id: mem-c
     clear_memories: true
+  - id: memory-should-not-remember
+    question: 帮我订一张明天去上海的机票
+    expect_action: answer
+    expect_no_memory_contains: 机票
+    thread_id: mem-skip
+    clear_memories: true
+  - id: memory-pending-once
+    question: 我叫阿花
+    expect_action: answer
+    expect_memory_contains: 阿花
+    expect_memory_status: pending
+    thread_id: mem-pending-a
+    clear_memories: true
+  - id: memory-pending-not-recalled
+    question: 我叫什么名字
+    expect_action: answer
+    expect_answer_contains: 没有检索到资料
+    thread_id: mem-pending-b
+  - id: memory-promote-repeat
+    question: 我叫阿花
+    expect_action: answer
+    expect_memory_contains: 阿花
+    expect_memory_status: active
+    thread_id: mem-pending-c
+  - id: memory-recall-after-promote
+    question: 我叫什么名字
+    expect_action: answer
+    expect_answer_contains: 阿花
+    thread_id: mem-pending-d

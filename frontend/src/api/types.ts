@@ -42,6 +42,8 @@ export interface MemoryItem {
   user_id: string
   content: string
   category: string
+  status: 'pending' | 'active'
+  hit_count: number
   source_session_id?: string | null
   created_at: string
   updated_at: string
