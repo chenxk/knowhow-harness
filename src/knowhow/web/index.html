@@ -171,10 +171,18 @@
       gap: 8px;
     }
 
-    #session-list {
+    #session-list, #memory-list {
       display: grid;
       gap: 6px;
       margin-top: 14px;
+    }
+
+    .panel-title {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .session-item {
@@ -428,7 +436,7 @@
       <div class="mark">KH</div>
       <div>
         <h1>工作台</h1>
-        <p class="sub">会话持久化 · 看路由、来源和工具结果</p>
+        <p class="sub">会话与长期记忆 · 看路由、来源和工具结果</p>
       </div>
     </div>
     <div class="facts" id="facts"></div>
@@ -440,6 +448,8 @@
         <button type="button" class="secondary" id="run-eval">跑黄金集</button>
       </div>
       <div id="session-list"></div>
+      <div class="panel-title">长期记忆</div>
+      <div id="memory-list"></div>
       <div class="chips" id="chips"></div>
       <div id="eval"></div>
     </aside>
@@ -454,14 +464,16 @@
   </div>
   <script>
     const actionLabel = { retrieve: "检索", tool: "工具", answer: "直接回答" };
-    const samples = ["如何重置密码", "lookup_note 重置密码", "现在几点", "你好"];
+    const samples = ["请记住：我叫小明", "我叫什么名字", "如何重置密码", "现在几点"];
     const transcript = document.querySelector("#transcript");
     const error = document.querySelector("#error");
     const question = document.querySelector("#question");
     const send = document.querySelector("#send");
     const sessionList = document.querySelector("#session-list");
+    const memoryList = document.querySelector("#memory-list");
     let log = [];
     let sessions = [];
+    let memories = [];
     let currentSessionId = "";
     let tracingOn = false;
 
@@ -518,6 +530,7 @@
     async function boot() {
       await loadMeta();
       await refreshSessions();
+      await refreshMemories();
       if (!sessions.length) {
         await createSession(false);
         return;
@@ -530,7 +543,7 @@
       const data = await response.json();
       tracingOn = Boolean(data.tracing);
       const facts = document.querySelector("#facts");
-      ["mode " + data.mode, "chunks " + data.corpus_chunks, "tools " + data.tools.join(","), "skills " + data.skills.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
+      ["mode " + data.mode, "chunks " + data.corpus_chunks, "memories " + (data.memory_count || 0), "tools " + data.tools.join(","), "skills " + data.skills.join(","), data.tracing ? "langfuse on" : "langfuse off"].forEach((text) => {
         const item = document.createElement("span");
         item.className = "fact";
         item.textContent = text;
@@ -542,6 +555,56 @@
       const response = await fetch("/api/sessions");
       sessions = await response.json();
       renderSessions();
+    }
+
+    async function refreshMemories() {
+      const response = await fetch("/api/memories");
+      memories = await response.json();
+      renderMemories();
+    }
+
+    function renderMemories() {
+      memoryList.replaceChildren();
+      if (!memories.length) {
+        const empty = document.createElement("div");
+        empty.className = "when";
+        empty.textContent = "还没有记忆";
+        memoryList.append(empty);
+        return;
+      }
+      memories.forEach((memory) => {
+        const item = document.createElement("div");
+        item.className = "session-item";
+        const main = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = memory.content;
+        const when = document.createElement("div");
+        when.className = "when";
+        when.textContent = (memory.category || "other") + " · " + formatWhen(memory.updated_at);
+        main.append(title, when);
+        const ops = document.createElement("div");
+        ops.className = "ops";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "secondary";
+        remove.textContent = "删除";
+        remove.addEventListener("click", () => deleteMemory(memory.id));
+        ops.append(remove);
+        item.append(main, ops);
+        memoryList.append(item);
+      });
+    }
+
+    async function deleteMemory(memoryId) {
+      if (!window.confirm("删除这条记忆？")) return;
+      const response = await fetch("/api/memories/" + encodeURIComponent(memoryId), { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json();
+        showError(detail(data));
+        return;
+      }
+      await refreshMemories();
     }
 
     function renderSessions() {
@@ -717,6 +780,7 @@
         question.value = "";
         await readStream(response);
         await refreshSessions();
+        await refreshMemories();
       } catch (err) {
         showError("请求失败");
       } finally {

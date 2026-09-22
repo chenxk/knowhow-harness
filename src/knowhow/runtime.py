@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import asyncio
+import logging
+from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -11,6 +13,12 @@ from langchain_openai import ChatOpenAI
 from knowhow.config import Settings
 from knowhow.graph.builder import build_graph
 from knowhow.graph.state import GraphState
+from knowhow.memory import (
+    SqliteMemoryStore,
+    explicit_remember,
+    extract_facts_live,
+    extract_facts_offline,
+)
 from knowhow.observe.tracing import Tracer
 from knowhow.policy import ModelDecider, ScriptedDecider
 from knowhow.rag.ingest import ingest_dir
@@ -19,6 +27,8 @@ from knowhow.respond import ModelResponder, OfflineResponder
 from knowhow.skills import load_skills
 from knowhow.tools.catalog import McpToolCatalog, StaticToolCatalog, ToolCatalog
 from knowhow.types import Action, ChatMessage, RunResult, StreamEvent, message_text
+
+_LOG = logging.getLogger(__name__)
 
 
 class _MermaidGraph(Protocol):
@@ -63,23 +73,28 @@ class Runtime:
         settings: Settings,
         graph: AgentGraph,
         store: InMemoryStore,
+        memory: SqliteMemoryStore,
         tracer: Tracer,
         catalog: ToolCatalog,
         skill_names: list[str],
         corpus_chunks: int,
+        chat: object | None = None,
     ) -> None:
         self.settings = settings
         self.graph = graph
         self.store = store
+        self.memory = memory
         self.tracer = tracer
         self.catalog = catalog
         self.skill_names = skill_names
         self.corpus_chunks = corpus_chunks
+        self._chat = chat
+        self._extract_tasks: set[asyncio.Task[None]] = set()
 
     async def run(self, question: str, *, thread_id: str) -> RunResult:
         """Run one question on a checkpoint thread."""
         done: StreamEvent | None = None
-        async for event in self.stream(question, thread_id=thread_id):
+        async for event in self.stream(question, thread_id=thread_id, defer_extract=False):
             if event.type == "done":
                 done = event
         if done is None:
@@ -98,6 +113,8 @@ class Runtime:
         *,
         thread_id: str,
         history: list[ChatMessage] | None = None,
+        defer_extract: bool = True,
+        user_id: str = "local",
     ) -> AsyncIterator[StreamEvent]:
         """Yield routing status, then answer text as the model produces it."""
         callbacks = self.tracer.callbacks()
@@ -105,7 +122,13 @@ class Runtime:
         sources: list[str] = []
         tool_name = ""
         config = _run_config(thread_id, callbacks)
-        state = await self._start_state(question, thread_id=thread_id, history=history)
+        memories = self.recall(question, user_id=user_id)
+        state = await self._start_state(
+            question,
+            thread_id=thread_id,
+            history=history,
+            memories=memories,
+        )
         async for item in self.graph.astream(
             state,
             config,
@@ -131,14 +154,97 @@ class Runtime:
                     yield StreamEvent(type="delta", text=text)
         snapshot = await self.graph.aget_state({"configurable": {"thread_id": thread_id}})
         values = snapshot.values if isinstance(snapshot.values, dict) else {}
+        answer = _last_ai(values)
+        remembered = explicit_remember(question)
+        if remembered is not None:
+            self.memory.upsert(
+                remembered,
+                category="other",
+                user_id=user_id,
+                source_session_id=thread_id,
+                dedupe_threshold=self.settings.memory_dedupe_threshold,
+            )
         yield StreamEvent(
             type="done",
             action=_as_action(values.get("action"), action),
             sources=list(values.get("sources") or sources),
             tool_name=str(values.get("tool_name") or tool_name),
             trace_id=self.tracer.trace_id(callbacks),
-            answer=_last_ai(values),
+            answer=answer,
         )
+        if remembered is not None:
+            return
+        prior = history or []
+        if self.settings.history_turns > 0:
+            prior = prior[-self.settings.history_turns :]
+        turns = [*prior, ChatMessage(role="user", content=question)]
+        if answer:
+            turns.append(ChatMessage(role="assistant", content=answer))
+        if defer_extract:
+            self.schedule_extract(turns, session_id=thread_id, user_id=user_id)
+        else:
+            await self.extract_after_turn(turns, session_id=thread_id, user_id=user_id)
+
+    def recall(self, question: str, *, user_id: str = "local") -> list[str]:
+        """Search durable memories for injection into decide/respond."""
+        hits = self.memory.search(
+            question,
+            k=self.settings.memory_top_k,
+            user_id=user_id,
+        )
+        return [hit.item.content for hit in hits]
+
+    def schedule_extract(
+        self,
+        turns: Sequence[ChatMessage],
+        *,
+        session_id: str | None,
+        user_id: str = "local",
+    ) -> None:
+        """Fire-and-forget extraction so SSE is not blocked."""
+        task = asyncio.create_task(
+            self._safe_extract(turns, session_id=session_id, user_id=user_id)
+        )
+        self._extract_tasks.add(task)
+        task.add_done_callback(self._extract_tasks.discard)
+
+    async def extract_after_turn(
+        self,
+        turns: Sequence[ChatMessage],
+        *,
+        session_id: str | None,
+        user_id: str = "local",
+    ) -> None:
+        """Extract atomic facts from the latest turns and upsert them."""
+        recent = list(turns[-4:]) if turns else []
+        if not recent:
+            return
+        last_user = next(
+            (item.content for item in reversed(recent) if item.role == "user"),
+            "",
+        )
+        remembered = explicit_remember(last_user)
+        if remembered is not None:
+            self.memory.upsert(
+                remembered,
+                category="other",
+                user_id=user_id,
+                source_session_id=session_id,
+                dedupe_threshold=self.settings.memory_dedupe_threshold,
+            )
+            return
+        if self.settings.mode == "live" and self._chat is not None:
+            facts = await extract_facts_live(self._chat, recent)
+        else:
+            facts = extract_facts_offline(recent)
+        for content, category in facts:
+            self.memory.upsert(
+                content,
+                category=category,
+                user_id=user_id,
+                source_session_id=session_id,
+                dedupe_threshold=self.settings.memory_dedupe_threshold,
+            )
 
     async def transcript(self, thread_id: str) -> list[ChatMessage]:
         """Return user and assistant messages stored on a checkpoint thread."""
@@ -158,23 +264,37 @@ class Runtime:
             messages.append(ChatMessage(role=role, content=message_text(message.content)))
         return messages
 
+    async def _safe_extract(
+        self,
+        turns: Sequence[ChatMessage],
+        *,
+        session_id: str | None,
+        user_id: str,
+    ) -> None:
+        try:
+            await self.extract_after_turn(turns, session_id=session_id, user_id=user_id)
+        except Exception:
+            _LOG.exception("memory extract failed")
+
     async def _start_state(
         self,
         question: str,
         *,
         thread_id: str,
         history: list[ChatMessage] | None,
+        memories: list[str],
     ) -> GraphState:
         """Seed prior turns when the in-memory checkpoint is empty."""
         snapshot = await self.graph.aget_state({"configurable": {"thread_id": thread_id}})
         values = snapshot.values if isinstance(snapshot.values, dict) else {}
         existing = values.get("messages") or []
         if existing:
-            return _initial_state(question)
+            state = _initial_state(question, memories=memories)
+            return state
         prior = history or []
         if self.settings.history_turns > 0:
             prior = prior[-self.settings.history_turns :]
-        return _seeded_state(prior, question)
+        return _seeded_state(prior, question, memories=memories)
 
 
 async def build_runtime(settings: Settings | None = None) -> Runtime:
@@ -194,6 +314,7 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
     if missing:
         joined = ", ".join(missing)
         raise RuntimeError(f"skills reference unknown tools: {joined}")
+    chat: ChatOpenAI | None = None
     if resolved.mode == "live":
         chat = ChatOpenAI(
             model=resolved.chat_model,
@@ -224,10 +345,12 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
         settings=resolved,
         graph=graph,
         store=store,
+        memory=SqliteMemoryStore(resolved.memory_file),
         tracer=Tracer(resolved),
         catalog=catalog,
         skill_names=[skill.name for skill in skills],
         corpus_chunks=corpus_chunks,
+        chat=chat,
     )
 
 
@@ -274,7 +397,7 @@ def _as_action(value: object, fallback: Action) -> Action:
     return fallback
 
 
-def _initial_state(question: str) -> GraphState:
+def _initial_state(question: str, *, memories: list[str]) -> GraphState:
     return {
         "messages": [HumanMessage(content=question)],
         "action": "answer",
@@ -285,10 +408,16 @@ def _initial_state(question: str) -> GraphState:
         "tool_args": {},
         "tool_output": "",
         "guidance": "",
+        "memories": memories,
     }
 
 
-def _seeded_state(history: list[ChatMessage], question: str) -> GraphState:
+def _seeded_state(
+    history: list[ChatMessage],
+    question: str,
+    *,
+    memories: list[str],
+) -> GraphState:
     messages: list[HumanMessage | AIMessage] = []
     for item in history:
         if item.role == "user":
@@ -306,6 +435,7 @@ def _seeded_state(history: list[ChatMessage], question: str) -> GraphState:
         "tool_args": {},
         "tool_output": "",
         "guidance": "",
+        "memories": memories,
     }
 
 

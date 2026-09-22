@@ -19,8 +19,12 @@ def test_mcp_config_lists_notes_server() -> None:
 
 
 @pytest.mark.asyncio
-async def test_golden_file_passes_offline() -> None:
-    settings = Settings(_env_file=None, mode="offline")
+async def test_golden_file_passes_offline(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
     runtime = await build_runtime(settings)
     cases = load_golden(settings.golden_file.read_text(encoding="utf-8"))
     report = await run_eval(runtime, cases)

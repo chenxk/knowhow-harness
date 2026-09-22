@@ -16,6 +16,9 @@ class EvalCase(BaseModel):
     expect_action: Action
     expect_source: str = ""
     expect_tool: str = ""
+    expect_answer_contains: str = ""
+    thread_id: str = ""
+    clear_memories: bool = False
 
 
 class GoldenFile(BaseModel):
@@ -94,8 +97,12 @@ async def run_eval(
 ) -> EvalReport:
     rows: list[CaseResult] = []
     for case in cases:
-        result = await runtime.run(case.question, thread_id=f"eval-{case.id}")
-        failures = _failures(case, result.action, result.sources, result.tool_name)
+        if case.clear_memories:
+            for item in runtime.memory.list():
+                runtime.memory.soft_delete(item.id)
+        thread_id = case.thread_id or f"eval-{case.id}"
+        result = await runtime.run(case.question, thread_id=thread_id)
+        failures = _failures(case, result.action, result.sources, result.tool_name, result.answer)
         rows.append(
             CaseResult(
                 case_id=case.id,
@@ -117,6 +124,7 @@ def _failures(
     action: Action,
     sources: tuple[str, ...],
     tool_name: str,
+    answer: str,
 ) -> list[str]:
     failures: list[str] = []
     if action != case.expect_action:
@@ -125,4 +133,6 @@ def _failures(
         failures.append(f"missing source {case.expect_source}")
     if case.expect_tool and tool_name != case.expect_tool:
         failures.append(f"tool {tool_name} != {case.expect_tool}")
+    if case.expect_answer_contains and case.expect_answer_contains not in answer:
+        failures.append(f"answer missing {case.expect_answer_contains!r}")
     return failures

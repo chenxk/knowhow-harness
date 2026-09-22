@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Knowhow Harness 是一个面向个人日常使用的 Agent Runtime。优先保证可用性、可靠性、会话与记忆持久化，以及本机工作流；命令从仓库根目录执行。
+Knowhow Harness 是一个个人可用的本地 Agent Runtime。命令从仓库根目录执行。
 
 ## 模块
 
@@ -11,14 +11,15 @@ Knowhow Harness 是一个面向个人日常使用的 Agent Runtime。优先保�
 | `policy.py` | 路由。offline 用脚本，live 用模型 JSON |
 | `respond.py` | 最终回答 |
 | `rag/` | 语料切块和 `VectorStore` |
+| `memory.py` | 跨会话原子事实记忆（SQLite）。与 checkpoint / RAG 语料分离 |
 | `tools/` | `ToolCatalog`。默认静态目录；`KNOWHOW_MCP_ENABLED=true` 时改走 MCP |
 | `skills.py` | 读取仓库 `skills/*/SKILL.md`。选中后才把正文交给回答 |
-| `memory.py` | 长期事实记忆（SQLite）。与 RAG 语料、图 checkpoint 分开 |
 | `evals/` | 只消费 `Runtime.run` 的结果，不把规则写进图节点 |
 | `observe/` | Langfuse callback 与 score 写入。两个密钥都缺省时不创建 client |
-| `web/` | 工作台（主交互面）。进程内复用一个 `Runtime`，页面只调 HTTP；会话落在 `.knowhow/sessions/` |
+| `web/` | FastAPI：`/api/*` + 生产态挂载 `web/static` SPA；无 `static/` 时回退 `index.html` |
 | `sessions.py` | 会话列表与消息 JSON 持久化、自动标题 |
 | `servers/` | 独立 MCP 进程，不 import `knowhow` |
+| `frontend/` | Vite + React SPA（主 UI）。`pnpm dev` 代理 `/api`；`pnpm build` 输出到 `web/static` |
 
 ## 约定
 
@@ -27,5 +28,6 @@ Knowhow Harness 是一个面向个人日常使用的 Agent Runtime。优先保�
 - 图的状态字段保持可序列化的普通值，不把连接或 client 放进 state。
 - 离线黄金集在 `evals/golden.yaml`。改路由或语料时同步改它，并跑 `uv run pytest`。
 - 用户可见的 CLI 文案用中文。代码标识符用英文。
-- 工作台会话默认写在 `KNOWHOW_SESSIONS_DIR`（默认 `.knowhow/sessions/`）。多轮把最近 `KNOWHOW_HISTORY_TURNS` 条消息喂给 decide/respond。
-- 改动以真实可用性为准：持久化、可观测、工具与记忆可靠性优先于演示脚手架式扩展。
+- 会话默认写在 `KNOWHOW_SESSIONS_DIR`（默认 `.knowhow/sessions/`）。多轮把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给 decide/respond。
+- 长期记忆默认落在 `KNOWHOW_MEMORY_PATH`（`.knowhow/memory.sqlite`）。开跑前 Top-K 注入 decide/respond；回合结束后异步抽取（`请记住` 同步写入）。只存原子事实，不把整段聊天当记忆，也不写入 `data/corpus`。
+- 改 UI：在 `frontend/` 用 `pnpm`；生产构建进 `src/knowhow/web/static/`，由 `knowhow serve` 在 `/` 提供。

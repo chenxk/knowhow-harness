@@ -1,0 +1,106 @@
+import type { MemoryItem, SessionSummary } from '../api/types'
+import { formatWhen } from '../lib/format'
+
+export function Sidebar({
+  sessions,
+  sessionId,
+  memories,
+  evalText,
+  onNew,
+  onSelect,
+  onRename,
+  onDelete,
+  onDeleteMemory,
+  onEval,
+}: {
+  sessions: SessionSummary[]
+  sessionId: string
+  memories: MemoryItem[]
+  evalText: string
+  onNew: () => void
+  onSelect: (id: string) => void
+  onRename: (id: string, title: string) => void
+  onDelete: (id: string) => void
+  onDeleteMemory: (id: string) => void
+  onEval: () => void
+}) {
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-head">
+        <button type="button" className="primary" onClick={onNew}>
+          新对话
+        </button>
+        <button type="button" className="ghost" onClick={onEval}>
+          评测
+        </button>
+      </div>
+
+      <div className="panel-label">会话</div>
+      <div className="session-list">
+        {!sessions.length && <p className="quiet">还没有会话</p>}
+        {sessions.map((session) => (
+          <div
+            key={session.id}
+            className={`session-row${session.id === sessionId ? ' active' : ''}`}
+          >
+            <button
+              type="button"
+              className="session-main"
+              onClick={() => onSelect(session.id)}
+            >
+              <span className="session-title">{session.title || '新对话'}</span>
+              <span className="session-when">{formatWhen(session.updated_at)}</span>
+            </button>
+            <div className="session-ops">
+              <button
+                type="button"
+                className="ghost tiny"
+                onClick={() => {
+                  const next = window.prompt('会话标题', session.title)
+                  if (next && next.trim()) onRename(session.id, next.trim())
+                }}
+              >
+                改名
+              </button>
+              <button
+                type="button"
+                className="ghost tiny"
+                onClick={() => {
+                  if (window.confirm('删除这个会话？')) onDelete(session.id)
+                }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel-label">长期记忆</div>
+      <div className="memory-list">
+        {!memories.length && <p className="quiet">还没有记忆</p>}
+        {memories.map((memory) => (
+          <div key={memory.id} className="memory-row">
+            <div>
+              <div className="memory-text">{memory.content}</div>
+              <div className="session-when">
+                {memory.category} · {formatWhen(memory.updated_at)}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="ghost tiny"
+              onClick={() => {
+                if (window.confirm('删除这条记忆？')) onDeleteMemory(memory.id)
+              }}
+            >
+              删除
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {evalText ? <pre className="eval-box">{evalText}</pre> : null}
+    </aside>
+  )
+}

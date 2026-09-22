@@ -18,6 +18,7 @@ def client(tmp_path: Path):
         _env_file=None,
         mode="offline",
         sessions_dir=tmp_path / "sessions",
+        memory_path=tmp_path / "memory.sqlite",
     )
     runtime = asyncio.run(build_runtime(settings))
     app = create_app(runtime)
@@ -25,11 +26,13 @@ def client(tmp_path: Path):
         yield test_client
 
 
-def test_index_is_the_bench(client: TestClient) -> None:
+def test_index_serves_ui(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "工作台" in response.text
-    assert "新对话" in response.text
+    text = response.text
+    # Built SPA, or legacy monolithic index.html when static/ is absent.
+    assert ("Knowhow" in text) or ("工作台" in text)
+    assert ("新对话" in text) or ("root" in text)
 
 
 def test_meta_reports_offline_runtime(client: TestClient) -> None:
@@ -97,6 +100,7 @@ def test_chat_followup_uses_history_after_cold_seed(
         _env_file=None,
         mode="offline",
         sessions_dir=tmp_path / "sessions",
+        memory_path=tmp_path / "memory.sqlite",
     )
     runtime = asyncio.run(build_runtime(settings))
     app = create_app(runtime)
@@ -136,8 +140,25 @@ def test_score_requires_tracing(client: TestClient) -> None:
 def test_eval_endpoint_passes_golden_set(client: TestClient) -> None:
     body = client.post("/api/eval").json()
     assert body["failed"] == 0
-    assert body["passed"] == 4
+    assert body["passed"] == 7
     assert body["scored"] is False
+
+
+def test_memories_list_and_delete(client: TestClient) -> None:
+    session_id = client.post("/api/sessions", json={}).json()["id"]
+    events = _events(
+        client.post(
+            "/api/chat",
+            json={"question": "请记住：我喜欢绿茶", "session_id": session_id},
+        ).text
+    )
+    assert any(event["type"] == "done" for event in events)
+    rows = client.get("/api/memories").json()
+    assert any("绿茶" in row["content"] for row in rows)
+    memory_id = next(row["id"] for row in rows if "绿茶" in row["content"])
+    deleted = client.delete(f"/api/memories/{memory_id}")
+    assert deleted.status_code == 200
+    assert all("绿茶" not in row["content"] for row in client.get("/api/memories").json())
 
 
 def test_title_from_text_truncates() -> None:

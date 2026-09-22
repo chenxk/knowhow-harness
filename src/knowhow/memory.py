@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel
 
@@ -24,6 +24,15 @@ _REMEMBER = re.compile(r"请记住[：:]\s*(.+)", re.DOTALL)
 _NAME = re.compile(r"我叫\s*([^\s，。！？,.!?；;：:]{1,40})")
 _AT = re.compile(r"我在\s*([^\s，。！？,.!?；;：:]{1,40})")
 _LIKE = re.compile(r"我喜欢\s*([^\s，。！？,.!?；;：:]{1,40})")
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _memory_terms(text: str) -> Counter[str]:
+    """Lexical bag with CJK unigrams so short personal queries still match."""
+    bag = terms(text)
+    bag.update(_CJK.findall(text))
+    return bag
+
 
 
 class MemoryItem(BaseModel):
@@ -206,12 +215,12 @@ class SqliteMemoryStore:
         user_id: str = "local",
     ) -> list[MemoryHit]:
         """Lexical Top-K over active memories (same scoring family as RAG)."""
-        query_terms = terms(query)
+        query_terms = _memory_terms(query)
         if not query_terms:
             return []
         ranked: list[MemoryHit] = []
         for item in self.list(user_id=user_id):
-            score = _cosine(query_terms, terms(item.content))
+            score = _cosine(query_terms, _memory_terms(item.content))
             if score > 0:
                 ranked.append(MemoryHit(item=item, score=score))
         ranked.sort(key=lambda hit: hit.score, reverse=True)
@@ -354,7 +363,7 @@ def _parse_extract_json(text: str) -> list[tuple[str, MemoryCategory]]:
         return []
     if not isinstance(data, list):
         return []
-    allowed = {"preference", "profile", "decision", "other"}
+    allowed: set[str] = {"preference", "profile", "decision", "other"}
     rows: list[tuple[str, MemoryCategory]] = []
     for item in data:
         if not isinstance(item, dict):
@@ -365,5 +374,5 @@ def _parse_extract_json(text: str) -> list[tuple[str, MemoryCategory]]:
             continue
         if category not in allowed:
             category = "other"
-        rows.append((content, category))  # type: ignore[arg-type]
+        rows.append((content, cast(MemoryCategory, category)))
     return rows

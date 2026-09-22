@@ -14,3 +14,20 @@ cases:
     question: 现在几点
     expect_action: tool
     expect_tool: current_time
+  - id: memory-remember
+    question: 请记住：我叫小明
+    expect_action: answer
+    expect_answer_contains: 记住
+    thread_id: mem-a
+    clear_memories: true
+  - id: memory-recall
+    question: 我叫什么名字
+    expect_action: answer
+    expect_answer_contains: 小明
+    thread_id: mem-b
+  - id: memory-after-delete
+    question: 我叫什么名字
+    expect_action: answer
+    expect_answer_contains: 没有检索到资料
+    thread_id: mem-c
+    clear_memories: true

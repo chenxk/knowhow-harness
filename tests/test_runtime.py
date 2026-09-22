@@ -1,12 +1,19 @@
 import pytest
+from pathlib import Path
 
 from knowhow.config import Settings
 from knowhow.runtime import build_runtime
 
 
 @pytest.mark.asyncio
-async def test_offline_routes() -> None:
-    runtime = await build_runtime(Settings(_env_file=None, mode="offline"))
+async def test_offline_routes(tmp_path: Path) -> None:
+    runtime = await build_runtime(
+        Settings(
+            _env_file=None,
+            mode="offline",
+            memory_path=tmp_path / "memory.sqlite",
+        )
+    )
     password = await runtime.run("如何重置密码", thread_id="password")
     tool = await runtime.run("lookup_note 重置密码", thread_id="tool")
     hello = await runtime.run("你好", thread_id="hello")
@@ -25,8 +32,14 @@ async def test_offline_routes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mermaid_lists_branches() -> None:
-    runtime = await build_runtime(Settings(_env_file=None, mode="offline"))
+async def test_mermaid_lists_branches(tmp_path: Path) -> None:
+    runtime = await build_runtime(
+        Settings(
+            _env_file=None,
+            mode="offline",
+            memory_path=tmp_path / "memory.sqlite",
+        )
+    )
     diagram = runtime.graph.get_graph().draw_mermaid()
     for name in ("decide", "retrieve", "act", "respond"):
         assert name in diagram

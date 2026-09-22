@@ -1,4 +1,4 @@
-"""HTTP test bench for one in-process runtime."""
+"""HTTP surface for the personal agent UI and /api."""
 
 from __future__ import annotations
 
@@ -9,10 +9,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from knowhow.evals.runner import LangfuseScoreSink, NullScoreSink, load_golden, run_eval
+from knowhow.memory import MemoryItem, SqliteMemoryStore
 from knowhow.runtime import Runtime, build_runtime
 from knowhow.sessions import (
     JsonSessionStore,
@@ -24,7 +27,9 @@ from knowhow.sessions import (
 from knowhow.types import Action
 
 _PAGE = Path(__file__).with_name("index.html")
+_STATIC = Path(__file__).with_name("static")
 _SESSION = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_MEMORY = re.compile(r"^m[A-Za-z0-9]{1,32}$")
 
 
 class ChatIn(BaseModel):
@@ -47,6 +52,7 @@ class MetaOut(BaseModel):
     tools: list[str]
     skills: list[str]
     tracing: bool
+    memory_count: int = 0
 
 
 class EvalRowOut(BaseModel):
@@ -77,7 +83,7 @@ class ScoreOut(BaseModel):
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
-    """Serve the test bench. A passed-in runtime is reused; otherwise one is built at startup."""
+    """Serve the SPA (or legacy index.html) and /api. Reuse a passed-in runtime when given."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -88,10 +94,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         yield
 
     app = FastAPI(title="Knowhow", lifespan=lifespan)
-
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return _PAGE.read_text(encoding="utf-8")
+    spa = _STATIC / "index.html"
 
     @app.get("/api/meta", response_model=MetaOut)
     async def meta() -> MetaOut:
@@ -103,6 +106,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             tools=current.catalog.names(),
             skills=current.skill_names,
             tracing=current.tracer.enabled,
+            memory_count=len(current.memory.list()),
         )
 
     @app.get("/api/sessions", response_model=list[SessionSummary])
@@ -148,6 +152,21 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="会话不存在")
         return session.messages
 
+    @app.get("/api/memories", response_model=list[MemoryItem])
+    async def list_memories() -> list[MemoryItem]:
+        current: Runtime = app.state.runtime
+        return current.memory.list()
+
+    @app.delete("/api/memories/{memory_id}")
+    async def delete_memory(memory_id: str) -> dict[str, bool]:
+        if _MEMORY.fullmatch(memory_id) is None:
+            raise HTTPException(status_code=400, detail="记忆 id 无效")
+        current: Runtime = app.state.runtime
+        store: SqliteMemoryStore = current.memory
+        if not store.soft_delete(memory_id):
+            raise HTTPException(status_code=404, detail="记忆不存在")
+        return {"ok": True}
+
     @app.post("/api/chat")
     async def chat(body: ChatIn) -> StreamingResponse:
         question = body.question.strip()
@@ -173,6 +192,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                         question,
                         thread_id=session_id,
                         history=history,
+                        defer_extract=True,
                     ):
                         payload = event.model_dump(mode="json")
                         yield _sse(payload)
@@ -257,6 +277,24 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             value=body.value,
             trace_id=body.trace_id.strip(),
         )
+
+    if spa.is_file():
+        assets = _STATIC / "assets"
+        if assets.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+        @app.get("/")
+        def index() -> FileResponse:
+            return FileResponse(spa)
+
+        @app.get("/favicon.svg")
+        def favicon() -> FileResponse:
+            return FileResponse(_STATIC / "favicon.svg")
+    else:
+
+        @app.get("/", response_class=HTMLResponse)
+        def index() -> str:
+            return _PAGE.read_text(encoding="utf-8")
 
     return app
 
