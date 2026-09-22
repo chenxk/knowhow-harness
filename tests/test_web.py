@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,22 +31,36 @@ def test_meta_reports_offline_runtime(client: TestClient) -> None:
     assert body["tracing"] is False
 
 
-def test_chat_keeps_the_thread(client: TestClient) -> None:
+def test_chat_streams_and_keeps_the_thread(client: TestClient) -> None:
     first = client.post("/api/chat", json={"question": "如何重置密码", "thread_id": "bench"})
     assert first.status_code == 200
-    payload = first.json()
-    assert payload["action"] == "retrieve"
-    assert payload["sources"] == ["password-reset.md"]
-    assert "重置密码" in payload["answer"]
+    assert first.headers["content-type"].startswith("text/event-stream")
+    events = _events(first.text)
+    deltas = [event["text"] for event in events if event["type"] == "delta"]
+    done = events[-1]
+    assert len(deltas) >= 2
+    assert "".join(deltas) == done["answer"]
+    assert done["type"] == "done"
+    assert done["action"] == "retrieve"
+    assert done["sources"] == ["password-reset.md"]
+    assert "重置密码" in done["answer"]
 
     second = client.post("/api/chat", json={"question": "你好", "thread_id": "bench"})
-    assert second.status_code == 200
-    messages = second.json()["messages"]
-    assert [item["content"] for item in messages if item["role"] == "user"] == [
+    assert _events(second.text)[-1]["action"] == "answer"
+    history = client.get("/api/threads/bench").json()
+    assert [item["content"] for item in history if item["role"] == "user"] == [
         "如何重置密码",
         "你好",
     ]
-    assert second.json()["action"] == "answer"
+
+
+def _events(body: str) -> list[dict[str, object]]:
+    events = []
+    for block in body.split("\n\n"):
+        for line in block.splitlines():
+            if line.startswith("data: "):
+                events.append(json.loads(line.removeprefix("data: ")))
+    return events
 
 
 def test_blank_question_is_rejected(client: TestClient) -> None:

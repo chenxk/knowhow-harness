@@ -25,6 +25,18 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class StreamEvent(BaseModel):
+    """One server-sent event while an answer is being produced."""
+
+    type: Literal["status", "delta", "done"]
+    text: str = ""
+    action: Action = "answer"
+    sources: list[str] = Field(default_factory=list)
+    tool_name: str = ""
+    trace_id: str | None = None
+    answer: str = ""
+
+
 class RunResult(BaseModel):
     """One graph invocation, including the fields eval checks."""
 

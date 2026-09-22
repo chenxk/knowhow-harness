@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -17,7 +18,7 @@ _ANSWER_SYSTEM = """用用户的语言回答。资料和工具结果里没有的
 class Responder(Protocol):
     """Produce the user-visible answer from retrieval and tool context."""
 
-    async def reply(
+    def astream(
         self,
         *,
         question: str,
@@ -25,14 +26,14 @@ class Responder(Protocol):
         context: list[str],
         sources: list[str],
         tool_output: str,
-    ) -> str:
-        """Return the answer text."""
+    ) -> AsyncIterator[str]:
+        """Yield answer text as it is produced."""
 
 
 class OfflineResponder:
     """Template answer used when `KNOWHOW_MODE=offline`."""
 
-    async def reply(
+    async def astream(
         self,
         *,
         question: str,
@@ -40,16 +41,19 @@ class OfflineResponder:
         context: list[str],
         sources: list[str],
         tool_output: str,
-    ) -> str:
+    ) -> AsyncIterator[str]:
         del question, query
         if tool_output:
-            return tool_output
-        if context:
+            text = tool_output
+        elif context:
             lines = ["根据资料：", *context]
             if sources:
                 lines.append("来源：" + ", ".join(sources))
-            return "\n".join(lines)
-        return "没有检索到资料，也没有调用工具。"
+            text = "\n".join(lines)
+        else:
+            text = "没有检索到资料，也没有调用工具。"
+        for start in range(0, len(text), _CHUNK):
+            yield text[start : start + _CHUNK]
 
 
 class ModelResponder:
@@ -58,7 +62,7 @@ class ModelResponder:
     def __init__(self, chat: Chat) -> None:
         self._chat = chat
 
-    async def reply(
+    async def astream(
         self,
         *,
         question: str,
@@ -66,7 +70,7 @@ class ModelResponder:
         context: list[str],
         sources: list[str],
         tool_output: str,
-    ) -> str:
+    ) -> AsyncIterator[str]:
         payload = {
             "question": question,
             "query": query,
@@ -74,10 +78,15 @@ class ModelResponder:
             "sources": sources,
             "tool_output": tool_output,
         }
-        message = await self._chat.ainvoke(
+        async for chunk in self._chat.astream(
             [
                 SystemMessage(content=_ANSWER_SYSTEM),
                 HumanMessage(content=str(payload)),
             ]
-        )
-        return message_text(message.content)
+        ):
+            delta = message_text(chunk.content)
+            if delta:
+                yield delta
+
+
+_CHUNK = 24

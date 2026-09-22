@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -29,6 +30,9 @@ class Chat(Protocol):
 
     async def ainvoke(self, messages: list[SystemMessage | HumanMessage]) -> AIMessage:
         """Return the next assistant message."""
+
+    def astream(self, messages: list[SystemMessage | HumanMessage]) -> AsyncIterator[AIMessage]:
+        """Yield assistant message chunks."""
 
 
 class Decider(Protocol):

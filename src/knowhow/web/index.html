@@ -221,6 +221,12 @@
     .stamp.tool { color: var(--tool); }
     .stamp.answer { color: var(--answer); }
 
+    .turn.assistant.pending .body::after {
+      content: "▍";
+      margin-left: 2px;
+      color: var(--muted);
+    }
+
     .meta {
       margin-top: 8px;
       color: var(--muted);
@@ -366,33 +372,95 @@
       }
       showError("");
       send.disabled = true;
+      log.push({ role: "user", content });
+      render();
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question: content, thread_id: thread.value.trim() || "web" }),
         });
-        const data = await response.json();
         if (!response.ok) {
+          const data = await response.json();
           showError(detail(data));
+          log.pop();
+          render();
           return;
         }
         question.value = "";
-        log.push({ role: "user", content });
-        log.push({
-          role: "assistant",
-          content: data.answer,
-          action: data.action,
-          sources: data.sources,
-          tool_name: data.tool_name,
-          trace_id: data.trace_id,
-        });
-        render();
+        await readStream(response);
       } catch (err) {
         showError("请求失败");
       } finally {
         send.disabled = false;
         question.focus();
+      }
+    }
+
+    async function readStream(response) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const turn = assistantTurn();
+      while (true) {
+        const step = await reader.read();
+        if (step.done) break;
+        buffer += decoder.decode(step.value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          const line = block.split("\n").find((item) => item.startsWith("data: "));
+          if (!line) continue;
+          applyEvent(turn, JSON.parse(line.slice(6)));
+        }
+      }
+    }
+
+    function assistantTurn() {
+      const last = log[log.length - 1];
+      if (!last || last.role !== "assistant") {
+        log.push({
+          role: "assistant",
+          content: "",
+          action: "",
+          sources: [],
+          tool_name: "",
+          trace_id: null,
+          pending: true,
+        });
+      }
+      return log[log.length - 1];
+    }
+
+    function applyEvent(turn, event) {
+      if (event.type === "error") {
+        showError(event.text || "请求失败");
+        turn.pending = false;
+        render();
+        return;
+      }
+      if (event.type === "status" || event.type === "done") {
+        turn.action = event.action || turn.action;
+        turn.sources = event.sources || [];
+        turn.tool_name = event.tool_name || "";
+        if (event.type === "done") {
+          turn.pending = false;
+          turn.trace_id = event.trace_id;
+          if (event.answer) turn.content = event.answer;
+        }
+        render();
+        return;
+      }
+      if (event.type === "delta") {
+        turn.content += event.text || "";
+        const bodies = transcript.querySelectorAll(".turn.assistant .body");
+        const body = bodies[bodies.length - 1];
+        if (!body) {
+          render();
+          return;
+        }
+        body.textContent = turn.content;
+        transcript.scrollTop = transcript.scrollHeight;
       }
     }
 
@@ -413,16 +481,23 @@
         who.textContent = message.role === "user" ? "提问" : "回答";
         const bubble = document.createElement("div");
         bubble.className = "bubble";
-        if (message.role === "assistant") {
+        if (message.role === "assistant" && message.action) {
           const stamp = document.createElement("div");
           stamp.className = "stamp " + message.action;
           stamp.textContent = actionLabel[message.action] || message.action;
           const body = document.createElement("div");
+          body.className = "body";
           body.textContent = message.content;
           bubble.append(stamp, body);
+        } else if (message.role === "assistant") {
+          const body = document.createElement("div");
+          body.className = "body";
+          body.textContent = message.content;
+          bubble.append(body);
         } else {
           bubble.textContent = message.content;
         }
+        if (message.pending) turn.classList.add("pending");
         turn.append(who, bubble);
         const bits = [];
         if (message.sources && message.sources.length) bits.push("sources " + message.sources.join(", "));

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from knowhow.evals.runner import LangfuseScoreSink, NullScoreSink, load_golden, run_eval
@@ -22,16 +23,6 @@ _THREAD = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 class ChatIn(BaseModel):
     question: str = Field(max_length=4000)
     thread_id: str = Field(default="web", pattern=_THREAD.pattern)
-
-
-class ChatOut(BaseModel):
-    thread_id: str
-    answer: str
-    action: Action
-    sources: list[str]
-    tool_name: str
-    trace_id: str | None
-    messages: list[ChatMessage]
 
 
 class MetaOut(BaseModel):
@@ -88,24 +79,26 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         async with app.state.lock:
             return await current.transcript(thread_id)
 
-    @app.post("/api/chat", response_model=ChatOut)
-    async def chat(body: ChatIn) -> ChatOut:
+    @app.post("/api/chat")
+    async def chat(body: ChatIn) -> StreamingResponse:
         question = body.question.strip()
         if not question:
             raise HTTPException(status_code=400, detail="问题不能为空")
         current: Runtime = app.state.runtime
-        async with app.state.lock:
-            result = await current.run(question, thread_id=body.thread_id)
-            current.tracer.flush()
-            messages = await current.transcript(body.thread_id)
-        return ChatOut(
-            thread_id=body.thread_id,
-            answer=result.answer,
-            action=result.action,
-            sources=list(result.sources),
-            tool_name=result.tool_name,
-            trace_id=result.trace_id,
-            messages=messages,
+
+        async def events():
+            async with app.state.lock:
+                try:
+                    async for event in current.stream(question, thread_id=body.thread_id):
+                        yield _sse(event.model_dump(mode="json"))
+                    current.tracer.flush()
+                except RuntimeError as exc:
+                    yield _sse({"type": "error", "text": str(exc)})
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     @app.post("/api/eval", response_model=EvalOut)
@@ -131,6 +124,10 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         )
 
     return app
+
+
+def _sse(payload: dict[str, object]) -> str:
+    return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
 
 def _check_thread(thread_id: str) -> None:

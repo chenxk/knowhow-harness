@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -52,14 +53,18 @@ def build_graph(
         return {"tool_output": output}
 
     async def respond(state: GraphState) -> dict[str, object]:
-        text = await responder.reply(
+        parts: list[str] = []
+        writer = get_stream_writer()
+        async for delta in responder.astream(
             question=_last_human(state),
             query=state["query"],
             context=state["context"],
             sources=state["sources"],
             tool_output=state["tool_output"],
-        )
-        return {"messages": [AIMessage(content=text)]}
+        ):
+            parts.append(delta)
+            writer({"text": delta})
+        return {"messages": [AIMessage(content="".join(parts))]}
 
     builder = StateGraph(GraphState)
     builder.add_node("decide", decide)
