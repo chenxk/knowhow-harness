@@ -30,6 +30,7 @@ from knowhow.sessions import (
 from knowhow.tools.catalog import HybridToolCatalog
 from knowhow.tools.mcp_config import (
     McpServer,
+    apply_mcp_document,
     delete_server,
     load_user_servers,
     set_server_enabled,
@@ -110,6 +111,10 @@ class McpEnabledIn(BaseModel):
     enabled: bool
 
 
+class McpDocumentIn(BaseModel):
+    document: str = Field(max_length=100_000)
+
+
 class McpServerOut(BaseModel):
     name: str
     enabled: bool
@@ -117,6 +122,7 @@ class McpServerOut(BaseModel):
     command: str
     args: list[str]
     url: str
+    has_headers: bool = False
     connected: bool
     tool_count: int
     tools: list[str]
@@ -126,6 +132,7 @@ class McpServerOut(BaseModel):
 class McpListOut(BaseModel):
     servers: list[McpServerOut]
     config_error: str = ""
+    config_path: str = ""
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
@@ -400,6 +407,17 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             await current.reload_mcp()
         return _mcp_list(current)
 
+    @app.post("/api/mcp/import", response_model=McpListOut)
+    async def import_mcp(body: McpDocumentIn) -> McpListOut:
+        current: Runtime = app.state.runtime
+        async with app.state.lock:
+            try:
+                apply_mcp_document(current.settings.mcp_store_path, body.document)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            await current.reload_mcp()
+        return _mcp_list(current)
+
     @app.delete("/api/mcp/{name}", response_model=McpListOut)
     async def remove_mcp(name: str) -> McpListOut:
         current: Runtime = app.state.runtime
@@ -472,13 +490,18 @@ def _mcp_list(current: Runtime) -> McpListOut:
                 command=server.command,
                 args=list(server.args),
                 url=server.url,
+                has_headers=bool(server.headers),
                 connected=bool(item and item.connected),
                 tool_count=item.tool_count if item else 0,
                 tools=list(item.tools) if item else [],
                 error=item.error if item else "",
             )
         )
-    return McpListOut(servers=rows, config_error=error or current.mcp_config_error)
+    return McpListOut(
+        servers=rows,
+        config_error=error or current.mcp_config_error,
+        config_path=str(current.settings.mcp_store_path),
+    )
 
 
 def _mcp_status(current: Runtime) -> dict[str, object]:

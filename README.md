@@ -2,7 +2,7 @@
 
 个人可用的本地 Agent，也是学习 Agent 工程（上下文、记忆、工具/Skills、eval、观测）的工作台，定位为：可自述的 Agent 工程工作台：日常聊天是默认；想学时通过 Skill 进入学习模式。
 
-单用户、本机优先。不是多租户 SaaS，也没有鉴权与队列。默认 `KNOWHOW_MODE=offline`：不调用模型，进程内词法检索，工具是本地静态目录。`live` 才接 OpenAI 兼容模型和可选的 MCP 进程。
+单用户、本机优先。不是多租户 SaaS，也没有鉴权与队列。默认 `KNOWHOW_MODE=offline`：不调用模型，进程内词法检索。内置工具在本地静态目录里；`.knowhow/mcp.json` 里启用的 MCP 在 offline 和 live 都会连上。`live` 才接 OpenAI 兼容模型。MCP 的传输、协议和示例见 [docs/mcp.md](docs/mcp.md)。
 
 ## 学习模式
 
@@ -26,7 +26,7 @@ src/knowhow/
   policy.py          脚本路由 / 模型 JSON 路由
   respond.py         模板回答 / 模型回答
   rag/               markdown 入库与检索
-  tools/             静态工具目录，或 MultiServerMCPClient
+  tools/             内置工具，并经 MultiServerMCPClient 追加 MCP
   skills.py          读取 skills/*/SKILL.md
   memory.py          长期事实记忆（SQLite）
   sessions.py        会话 JSON 持久化
@@ -34,7 +34,8 @@ src/knowhow/
   observe/           Langfuse callback
   web/               FastAPI `/api` + 挂载 static SPA
   web/static/        `pnpm --dir frontend build` 产物
-servers/notes_mcp.py
+servers/notes_mcp.py   stdio MCP 示例（不 import knowhow）
+docs/mcp.md            MCP 客户端、传输、协议要点
 skills/              SKILL.md（含 learn-agent 学习模式）
 data/corpus/         离线资料（含 agent-*.md 工程提纲）
 evals/golden.yaml
@@ -64,6 +65,10 @@ pnpm --dir frontend dev
 
 `eval` 有失败用例时退出码为 1。
 
+## CLI
+
+参数解析、`serve` 怎样拉起 FastAPI、`run` 怎样进入 `Runtime`、`Settings.check` 失败时的退出码，以及加子命令要改哪个文件，见 [docs/cli.md](docs/cli.md)。
+
 ## Live
 
 ```bash
@@ -73,7 +78,7 @@ set OPENAI_BASE_URL=https://api.deepseek.com
 set KNOWHOW_CHAT_MODEL=deepseek-chat
 ```
 
-聊天页左侧栏左下角「设置」可以添加 MCP 服务，配置写在 `.knowhow/mcp.json`（已 gitignore）。支持 stdio（命令和参数）以及 URL（streamable HTTP 或 SSE）。保存后下一轮对话就能调用；停用的服务不注册工具；连不上时错误显示在设置里，内置工具仍可用。和内置工具重名时会加上服务名前缀。`KNOWHOW_MCP_ENABLED=true` 仍会额外合并 `config/mcp.yaml`。
+聊天页左侧栏左下角「设置」里点「添加 MCP」，贴入 mcpServers JSON，写入 `.knowhow/mcp.json`（`.knowhow/` 已 gitignore）。保存时立刻重连，下一轮对话就能选到新工具。`KNOWHOW_MCP_ENABLED=true` 时再合并 `config/mcp.yaml`；设置里的服务不依赖这个开关。传输差别、握手和 `servers/notes_mcp.py` 见 [docs/mcp.md](docs/mcp.md)。
 
 `LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback；`LANGFUSE_HOST` 指向你的 Langfuse 实例（自建或 cloud）。`LANGFUSE_PROJECT_ID` 有值时，解剖抽屉的「在 Langfuse 打开」指向该项目的 traces 搜索；缺省则不生成链接。Eval 给有 trace id 的用例写 boolean score `case_pass`。UI 在回答下方提供「有用 / 没用」，写入 `user_feedback` score。
 

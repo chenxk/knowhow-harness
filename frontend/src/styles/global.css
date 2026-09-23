@@ -897,7 +897,7 @@ button {
 }
 
 .settings-panel {
-  width: min(440px, 100%);
+  width: min(560px, 100%);
   max-height: min(78vh, 720px);
   overflow: auto;
   padding: 16px;
@@ -925,6 +925,17 @@ button {
   margin: 0 4px 12px;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.mcp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mcp-toolbar .panel-label {
+  margin: 8px 4px;
 }
 
 .mcp-list,
@@ -974,10 +985,37 @@ button {
 }
 
 .mcp-form input:focus,
-.mcp-form select:focus {
+.mcp-form select:focus,
+.mcp-form textarea:focus {
   outline: none;
   border-color: rgba(47, 158, 143, 0.55);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mcp-path {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.mcp-form textarea {
+  min-height: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.mcp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .settings-panel .error-line {

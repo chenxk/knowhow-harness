@@ -67,6 +67,7 @@ export interface McpServer {
   command: string
   args: string[]
   url: string
+  has_headers: boolean
   connected: boolean
   tool_count: number
   tools: string[]
@@ -76,6 +77,7 @@ export interface McpServer {
 export interface McpList {
   servers: McpServer[]
   config_error: string
+  config_path: string
 }
 
 export interface EvalResult {

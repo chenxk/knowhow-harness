@@ -2,7 +2,6 @@ import type {
   EvalResult,
   LabStatus,
   McpList,
-  McpTransport,
   MemoryItem,
   Meta,
   Session,
@@ -94,19 +93,12 @@ export async function listMcp(): Promise<McpList> {
   return readJson(await fetch('/api/mcp'))
 }
 
-export async function saveMcp(server: {
-  name: string
-  enabled: boolean
-  transport: McpTransport
-  command: string
-  args: string[]
-  url: string
-}): Promise<McpList> {
+export async function importMcp(document: string): Promise<McpList> {
   return readJson(
-    await fetch('/api/mcp', {
+    await fetch('/api/mcp/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(server),
+      body: JSON.stringify({ document }),
     }),
   )
 }
