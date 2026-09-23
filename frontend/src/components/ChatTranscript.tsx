@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { postScore } from '../api/client'
-import type { TranscriptMessage } from '../api/types'
+import type { TranscriptMessage, TurnDissection } from '../api/types'
 import { ACTION_LABEL } from '../lib/format'
 import { CopyButton } from './CopyButton'
 import { DissectionDrawer } from './DissectionDrawer'
@@ -45,7 +45,7 @@ export function ChatTranscript({
 
   return (
     <div className="transcript">
-      {messages.map((message) =>
+      {messages.map((message, index) =>
         message.role === 'user' ? (
           <article key={message.id} className="turn user">
             <div className="turn-head">
@@ -62,6 +62,7 @@ export function ChatTranscript({
           <AssistantTurn
             key={message.id}
             message={message}
+            question={previousQuestion(messages, index)}
             tracing={tracing}
             labRefreshKey={labRefreshKey}
             onFeedback={onFeedback}
@@ -75,12 +76,14 @@ export function ChatTranscript({
 
 function AssistantTurn({
   message,
+  question,
   tracing,
   labRefreshKey,
   onFeedback,
   onError,
 }: {
   message: TranscriptMessage
+  question: string
   tracing: boolean
   labRefreshKey: string
   onFeedback: (id: string, value: number) => void
@@ -166,11 +169,56 @@ function AssistantTurn({
           )}
         </div>
       )}
-      {message.dissection && !message.pending ? (
-        <DissectionDrawer dissection={message.dissection} refreshKey={labRefreshKey} />
+      {!message.pending ? (
+        <DissectionDrawer
+          dissection={message.dissection ?? fallbackDissection(message, question)}
+          refreshKey={labRefreshKey}
+        />
       ) : null}
     </article>
   )
+}
+
+function previousQuestion(messages: TranscriptMessage[], index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const item = messages[i]
+    if (item?.role === 'user') return item.content
+  }
+  return ''
+}
+
+function fallbackDissection(message: TranscriptMessage, question: string): TurnDissection {
+  const action = message.action ?? 'answer'
+  const snippet = message.content.trim().slice(0, 400)
+  return {
+    route: {
+      action,
+      tool_name: message.tool_name ?? '',
+      sources: message.sources ?? [],
+      query: '',
+    },
+    why: { reason: 'unknown', detail: '原因未记录' },
+    injected: { history_turns: 0, memories: [], guidance_present: false },
+    tool_output_summary: '',
+    trace_id: message.trace_id ?? null,
+    tracing: false,
+    langfuse_hint: null,
+    user_visible: { question, answer_snippet: snippet },
+    model_visible: {
+      system_kind: 'answer',
+      guidance_present: false,
+      guidance_preview: '',
+      history_turns: 0,
+      history: [],
+      memories: [],
+      context_previews: [],
+      sources: message.sources ?? [],
+      tool_output_preview: '',
+      query: '',
+    },
+    lab: null,
+    default_open: false,
+  }
 }
 
 function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {

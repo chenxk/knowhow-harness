@@ -14,6 +14,7 @@ from knowhow.dissection import build_dissection, redact_secrets
 from knowhow.labs import check_lab, lab_by_id, lab_for_topic
 from knowhow.memory import MemoryItem
 from knowhow.runtime import build_runtime
+from knowhow.sessions import JsonSessionStore
 from knowhow.web.app import create_app
 
 
@@ -167,6 +168,39 @@ def test_chat_persists_dissection_and_lab_api(tmp_path: Path) -> None:
         assert remembered["injected"]["history_turns"] == 2
         assert remembered["model_visible"]["history"][0]["role"] == "user"
         assert remembered["user_visible"]["question"].startswith("请记住")
+
+
+def test_get_backfills_assistant_dissection(tmp_path: Path) -> None:
+    store = JsonSessionStore(tmp_path)
+    created = store.create(title="旧对话")
+    raw = {
+        "id": created.id,
+        "title": "旧对话",
+        "created_at": created.created_at,
+        "updated_at": created.updated_at,
+        "messages": [
+            {"role": "user", "content": "现在来一个新的对话"},
+            {
+                "role": "assistant",
+                "content": "好的",
+                "action": "answer",
+                "trace_id": "abc",
+            },
+        ],
+    }
+    (tmp_path / f"{created.id}.json").write_text(
+        json.dumps(raw, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    loaded = store.get(created.id)
+    assert loaded is not None
+    assert loaded.messages[0].dissection is None
+    view = loaded.messages[1].dissection
+    assert view is not None
+    assert view.why.reason == "unknown"
+    assert view.route.action == "answer"
+    assert view.user_visible.question == "现在来一个新的对话"
+    assert view.trace_id == "abc"
 
 
 def _events(body: str) -> list[dict[str, object]]:

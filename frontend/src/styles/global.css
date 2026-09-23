@@ -545,9 +545,9 @@ button {
   cursor: pointer;
   list-style: none;
   padding: 8px 10px;
-  color: var(--muted);
+  color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   user-select: none;
 }
 

@@ -11,7 +11,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from knowhow.dissection import TurnDissection
+from knowhow.dissection import (
+    REASON_LABELS,
+    InjectedView,
+    RouteView,
+    TurnDissection,
+    UserVisibleView,
+    WhyView,
+    truncate,
+)
 from knowhow.types import Action, ChatMessage
 
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -111,9 +119,11 @@ class JsonSessionStore:
         if path is None or not path.is_file():
             return None
         try:
-            return Session.model_validate_json(path.read_text(encoding="utf-8"))
+            session = Session.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             return None
+        _backfill_dissection(session)
+        return session
 
     def rename(self, session_id: str, title: str) -> Session | None:
         """Rename a session. Empty titles become 新对话."""
@@ -191,6 +201,32 @@ class JsonSessionStore:
         if not is_session_id(session_id):
             return None
         return self.root / f"{session_id}.json"
+
+
+def _backfill_dissection(session: Session) -> None:
+    """Attach a minimal dissection to assistant rows that were stored without one."""
+    question = ""
+    for message in session.messages:
+        if message.role == "user":
+            question = message.content
+            continue
+        if message.role != "assistant" or message.dissection is not None:
+            continue
+        action: Action = message.action or "answer"
+        message.dissection = TurnDissection(
+            route=RouteView(
+                action=action,
+                tool_name=message.tool_name,
+                sources=list(message.sources),
+            ),
+            why=WhyView(reason="unknown", detail=REASON_LABELS["unknown"]),
+            injected=InjectedView(),
+            trace_id=message.trace_id,
+            user_visible=UserVisibleView(
+                question=truncate(question, 400),
+                answer_snippet=truncate(message.content, 400),
+            ),
+        )
 
 
 def _new_id() -> str:
