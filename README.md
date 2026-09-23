@@ -34,7 +34,6 @@ src/knowhow/
   observe/           Langfuse callback
   web/               FastAPI `/api` + 挂载 static SPA
   web/static/        `pnpm --dir frontend build` 产物
-  web/index.html     无 static 时的遗留回退页
 servers/notes_mcp.py
 skills/              SKILL.md（含 learn-agent 学习模式）
 data/corpus/         离线资料（含 agent-*.md 工程提纲）
