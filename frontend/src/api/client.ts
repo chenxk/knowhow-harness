@@ -72,16 +72,6 @@ export async function promoteMemory(memoryId: string): Promise<MemoryItem> {
   )
 }
 
-export async function consolidateMemories(sessionId: string): Promise<void> {
-  await readJson(
-    await fetch('/api/memories/consolidate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
-    }),
-  )
-}
-
 export async function deleteMemory(memoryId: string): Promise<void> {
   await readJson(
     await fetch(`/api/memories/${encodeURIComponent(memoryId)}`, { method: 'DELETE' }),

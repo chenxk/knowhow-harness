@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     memory_top_k: int = 4
     memory_dedupe_threshold: float = 0.82
     memory_promote_hits: int = 2
-    memory_consolidate_on_switch: bool = True
+    # Off by default: switching sessions must not run another model extract.
+    memory_consolidate_on_switch: bool = False
     top_k: int = 4
     retrieve_threshold: float = 0.12
     langfuse_public_key: str = Field(

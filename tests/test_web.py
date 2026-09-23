@@ -182,7 +182,7 @@ def test_memories_list_and_delete(client: TestClient) -> None:
     assert all("绿茶" not in row["content"] for row in client.get("/api/memories").json())
 
 
-def test_memories_promote_and_consolidate(client: TestClient) -> None:
+def test_memories_promote_and_consolidate_skips_by_default(client: TestClient) -> None:
     session_id = client.post("/api/sessions", json={}).json()["id"]
     _events(
         client.post(
@@ -196,14 +196,48 @@ def test_memories_promote_and_consolidate(client: TestClient) -> None:
     promoted = client.post(f"/api/memories/{pending['id']}/promote")
     assert promoted.status_code == 200
     assert promoted.json()["status"] == "active"
-    other = client.post("/api/sessions", json={}).json()["id"]
     consolidated = client.post(
         "/api/memories/consolidate",
         json={"session_id": session_id},
     )
     assert consolidated.status_code == 200
-    assert consolidated.json()["ok"] is True
-    assert other  # created successfully after consolidate hook path
+    body = consolidated.json()
+    assert body["ok"] is True
+    assert body["skipped"] is True
+    assert body["written"] == 0
+    still = next(
+        row for row in client.get("/api/memories").json() if row["id"] == pending["id"]
+    )
+    assert still["status"] == "active"
+
+
+def test_consolidate_endpoint_runs_when_enabled(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        sessions_dir=tmp_path / "sessions",
+        memory_path=tmp_path / "memory.sqlite",
+        memory_consolidate_on_switch=True,
+    )
+    runtime = asyncio.run(build_runtime(settings))
+    app = create_app(runtime)
+    with TestClient(app) as enabled:
+        session_id = enabled.post("/api/sessions", json={}).json()["id"]
+        _events(
+            enabled.post(
+                "/api/chat",
+                json={"question": "我在杭州", "session_id": session_id},
+            ).text
+        )
+        consolidated = enabled.post(
+            "/api/memories/consolidate",
+            json={"session_id": session_id},
+        )
+    assert consolidated.status_code == 200
+    body = consolidated.json()
+    assert body["ok"] is True
+    assert body.get("skipped") is not True
+    assert body["written"] >= 1
 
 
 def test_title_from_text_truncates() -> None:

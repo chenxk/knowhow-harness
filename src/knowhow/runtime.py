@@ -16,7 +16,9 @@ from knowhow.graph.builder import build_graph
 from knowhow.graph.state import GraphState
 from knowhow.memory import (
     ExtractedFact,
+    MemoryItem,
     SqliteMemoryStore,
+    correction_target,
     explicit_remember,
     extract_facts_live,
     extract_facts_offline,
@@ -206,6 +208,7 @@ class Runtime:
             user_id=user_id,
             statuses=("active",),
         )
+        self.memory.mark_recalled([hit.item.id for hit in hits])
         return [hit.item.content for hit in hits]
 
     def schedule_extract(
@@ -230,7 +233,7 @@ class Runtime:
         user_id: str = "local",
         window: int = 4,
     ) -> None:
-        """Light extract: durable facts go to pending (or promote on repeat)."""
+        """Light extract: add, update, or delete against memories related to this turn."""
         recent = list(turns[-window:]) if turns else []
         if not recent:
             return
@@ -242,7 +245,8 @@ class Runtime:
         if remembered is not None:
             self._write_explicit(remembered, session_id=session_id, user_id=user_id)
             return
-        facts = await self._collect_facts(recent)
+        related = self.memory.related(last_user, user_id=user_id)
+        facts = await self._collect_facts(recent, related)
         self._ingest_candidates(facts, session_id=session_id, user_id=user_id)
 
     async def consolidate_session(
@@ -252,7 +256,7 @@ class Runtime:
         session_id: str | None,
         user_id: str = "local",
     ) -> int:
-        """Merge recent session turns once into pending/active (switch hook)."""
+        """Extract durable facts from recent turns. The UI does not call this on switch."""
         limit = self.settings.history_turns if self.settings.history_turns > 0 else 12
         recent = list(turns[-limit:]) if turns else []
         if not recent:
@@ -263,10 +267,16 @@ class Runtime:
             remembered = explicit_remember(turn.content)
             if remembered is not None:
                 self._write_explicit(remembered, session_id=session_id, user_id=user_id)
-        facts = await self._collect_facts(recent)
-        durable = [fact for fact in facts if fact.durable]
-        self._ingest_candidates(durable, session_id=session_id, user_id=user_id)
-        return len(durable)
+        last_user = next(
+            (item.content for item in reversed(recent) if item.role == "user"),
+            "",
+        )
+        related = self.memory.related(last_user, user_id=user_id)
+        facts = await self._collect_facts(recent, related)
+        self._ingest_candidates(facts, session_id=session_id, user_id=user_id)
+        return sum(
+            1 for fact in facts if fact.op == "delete" or (fact.op != "noop" and fact.durable)
+        )
 
     def _write_explicit(
         self,
@@ -275,6 +285,21 @@ class Runtime:
         session_id: str | None,
         user_id: str,
     ) -> None:
+        rows = self.memory.list(user_id=user_id, statuses=("pending", "active"))
+        target = correction_target(
+            content,
+            rows,
+            dedupe_threshold=self.settings.memory_dedupe_threshold,
+        )
+        if target is not None:
+            revised = self.memory.revise(
+                target.id,
+                content,
+                source_session_id=session_id,
+                force_active=True,
+            )
+            if revised is not None:
+                return
         self.memory.upsert(
             content,
             category="other",
@@ -293,22 +318,54 @@ class Runtime:
         user_id: str,
     ) -> None:
         for fact in facts:
-            if not fact.durable:
-                continue
-            self.memory.upsert(
+            self._apply_fact(fact, session_id=session_id, user_id=user_id)
+
+    def _apply_fact(
+        self,
+        fact: ExtractedFact,
+        *,
+        session_id: str | None,
+        user_id: str,
+    ) -> None:
+        if fact.op == "noop":
+            return
+        if fact.op == "delete":
+            if fact.target_id:
+                self.memory.soft_delete(fact.target_id)
+            return
+        if not fact.durable or not fact.content.strip():
+            return
+        if fact.op == "update" and fact.target_id:
+            revised = self.memory.revise(
+                fact.target_id,
                 fact.content,
                 category=fact.category,
-                user_id=user_id,
                 source_session_id=session_id,
-                dedupe_threshold=self.settings.memory_dedupe_threshold,
-                status="pending",
-                promote_hits=self.settings.memory_promote_hits,
             )
+            if revised is not None:
+                return
+        self.memory.upsert(
+            fact.content,
+            category=fact.category,
+            user_id=user_id,
+            source_session_id=session_id,
+            dedupe_threshold=self.settings.memory_dedupe_threshold,
+            status="pending",
+            promote_hits=self.settings.memory_promote_hits,
+        )
 
-    async def _collect_facts(self, turns: Sequence[ChatMessage]) -> list[ExtractedFact]:
+    async def _collect_facts(
+        self,
+        turns: Sequence[ChatMessage],
+        existing: Sequence[MemoryItem],
+    ) -> list[ExtractedFact]:
         if self.settings.mode == "live" and self._chat is not None:
-            return await extract_facts_live(self._chat, turns)
-        return extract_facts_offline(turns)
+            return await extract_facts_live(self._chat, turns, existing)
+        return extract_facts_offline(
+            turns,
+            existing,
+            dedupe_threshold=self.settings.memory_dedupe_threshold,
+        )
 
     async def transcript(self, thread_id: str) -> list[ChatMessage]:
         """Return user and assistant messages stored on a checkpoint thread."""

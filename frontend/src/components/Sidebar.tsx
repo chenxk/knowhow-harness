@@ -1,5 +1,20 @@
+import { useState } from 'react'
 import type { MemoryItem, SessionSummary } from '../api/types'
 import { formatWhen } from '../lib/format'
+
+const SESSION_PREVIEW = 5
+
+function visibleSessions(
+  sessions: SessionSummary[],
+  sessionId: string,
+  showAll: boolean,
+): SessionSummary[] {
+  if (showAll || sessions.length <= SESSION_PREVIEW) return sessions
+  const head = sessions.slice(0, SESSION_PREVIEW)
+  if (head.some((session) => session.id === sessionId)) return head
+  const current = sessions.find((session) => session.id === sessionId)
+  return current ? [...head, current] : head
+}
 
 export function Sidebar({
   sessions,
@@ -26,6 +41,9 @@ export function Sidebar({
   onPromoteMemory: (id: string) => void
   onEval: () => void
 }) {
+  const [showAllSessions, setShowAllSessions] = useState(false)
+  const rows = visibleSessions(sessions, sessionId, showAllSessions)
+  const hasMore = rows.length < sessions.length
   const active = memories.filter((item) => item.status === 'active')
   const pending = memories.filter((item) => item.status === 'pending')
 
@@ -43,7 +61,7 @@ export function Sidebar({
       <div className="panel-label">会话</div>
       <div className="session-list">
         {!sessions.length && <p className="quiet">还没有会话</p>}
-        {sessions.map((session) => (
+        {rows.map((session) => (
           <div
             key={session.id}
             className={`session-row${session.id === sessionId ? ' active' : ''}`}
@@ -79,6 +97,15 @@ export function Sidebar({
             </div>
           </div>
         ))}
+        {hasMore ? (
+          <button
+            type="button"
+            className="ghost session-more"
+            onClick={() => setShowAllSessions(true)}
+          >
+            更多
+          </button>
+        ) : null}
       </div>
 
       <div className="panel-label">长期记忆</div>

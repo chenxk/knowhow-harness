@@ -190,6 +190,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
 
     @app.post("/api/memories/consolidate")
     async def consolidate_memories(body: ConsolidateIn) -> dict[str, object]:
+        """Opt-in batch extract. The UI does not call this when switching sessions."""
         current: Runtime = app.state.runtime
         if not current.settings.memory_consolidate_on_switch:
             return {"ok": True, "skipped": True, "written": 0}

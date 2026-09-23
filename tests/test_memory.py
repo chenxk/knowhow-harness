@@ -6,6 +6,7 @@ from knowhow.config import Settings
 from knowhow.memory import (
     SqliteMemoryStore,
     explicit_remember,
+    extract_facts_live,
     extract_facts_offline,
     is_ephemeral_turn,
 )
@@ -212,3 +213,153 @@ async def test_consolidate_session_extracts_pending(tmp_path: Path) -> None:
     assert written >= 1
     rows = [item for item in runtime.memory.list() if "杭州" in item.content]
     assert rows and rows[0].status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_location_correction_overwrites_same_row(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("我在上海", thread_id="loc-1")
+    await runtime.run("我搬到杭州了", thread_id="loc-2")
+    rows = [item for item in runtime.memory.list() if item.active]
+    places = [item for item in rows if "上海" in item.content or "杭州" in item.content]
+    assert len(places) == 1
+    assert places[0].content == "用户在杭州"
+    assert "上海" not in places[0].content
+    assert places[0].status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_explicit_location_stays_active_after_move(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("请记住：我在上海", thread_id="loc-a")
+    await runtime.run("我搬到杭州了", thread_id="loc-b")
+    places = [
+        item for item in runtime.memory.list() if "杭州" in item.content or "上海" in item.content
+    ]
+    assert len(places) == 1
+    assert "杭州" in places[0].content
+    assert places[0].status == "active"
+
+
+@pytest.mark.asyncio
+async def test_forget_deletes_matching_memory(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("请记住：我在上海", thread_id="fg-1")
+    await runtime.run("忘掉我在上海", thread_id="fg-2")
+    assert [item for item in runtime.memory.list() if "上海" in item.content] == []
+
+    await runtime.run("请记住：我喜欢深色主题", thread_id="fg-3")
+    await runtime.run("不要记住我喜欢深色主题", thread_id="fg-4")
+    assert [item for item in runtime.memory.list() if "深色" in item.content] == []
+
+
+@pytest.mark.asyncio
+async def test_repeat_does_not_add_a_second_row(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("我在上海", thread_id="rep-1")
+    await runtime.run("我在上海", thread_id="rep-2")
+    places = [item for item in runtime.memory.list() if "上海" in item.content]
+    assert len(places) == 1
+    assert places[0].status == "active"
+
+
+class _ScriptedChat:
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.seen: list[str] = []
+
+    async def ainvoke(self, messages: object) -> object:
+        self.seen.append(str(messages))
+        return type("Msg", (), {"content": self.content})()
+
+
+@pytest.mark.asyncio
+async def test_invalid_live_json_leaves_store_intact(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("请记住：我在上海", thread_id="bad-1")
+    before = [(item.id, item.content, item.status) for item in runtime.memory.list()]
+    related = runtime.memory.related("我搬到杭州了")
+    chat = _ScriptedChat("这不是 JSON")
+    facts = await extract_facts_live(
+        chat,
+        [ChatMessage(role="user", content="我搬到杭州了")],
+        related,
+    )
+    assert facts == []
+    assert any(item.id in chat.seen[0] for item in runtime.memory.list())
+    runtime._ingest_candidates(facts, session_id="bad-2", user_id="local")
+    after = [(item.id, item.content, item.status) for item in runtime.memory.list()]
+    assert after == before
+
+    unknown = _ScriptedChat(
+        '[{"op":"destroy","id":"m-nope","content":"用户在火星","category":"profile"}]'
+    )
+    parsed = await extract_facts_live(
+        unknown,
+        [ChatMessage(role="user", content="随便说说")],
+        related,
+    )
+    assert parsed and parsed[0].op == "add"
+    assert parsed[0].target_id is None
+    runtime._ingest_candidates(parsed, session_id="bad-3", user_id="local")
+    rows = runtime.memory.list()
+    assert any("上海" in item.content and item.status == "active" for item in rows)
+    assert any("火星" in item.content and item.status == "pending" for item in rows)
+
+
+def test_recall_tie_prefers_recently_used(tmp_path: Path) -> None:
+    store = SqliteMemoryStore(tmp_path / "memory.sqlite")
+    store.add("用户喜欢咖啡", category="preference", status="active")
+    second = store.add("用户喜欢咖啡", category="preference", status="active")
+    store.mark_recalled([second.id])
+    hits = store.search("喜欢咖啡", k=2)
+    assert hits[0].item.id == second.id
+    assert hits[0].item.last_recalled_at
+    unrelated = store.add("备忘录里的会议纪要", category="other", status="active")
+    store.mark_recalled([unrelated.id])
+    hits = store.search("喜欢咖啡", k=2)
+    assert all("咖啡" in hit.item.content for hit in hits)
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_recall_stamps_last_recalled_at(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = await build_runtime(settings)
+    await runtime.run("请记住：我叫小明", thread_id="rc-1")
+    item = next(row for row in runtime.memory.list() if "小明" in row.content)
+    assert item.last_recalled_at is None
+    await runtime.run("我叫什么名字", thread_id="rc-2")
+    stamped = runtime.memory.get(item.id)
+    assert stamped is not None
+    assert stamped.last_recalled_at
+    assert stamped.updated_at == item.updated_at

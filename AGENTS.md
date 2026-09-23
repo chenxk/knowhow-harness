@@ -33,5 +33,5 @@ Knowhow Harness：个人可用的本地 Agent Runtime，兼作学习 Agent 工�
 - 离线黄金集在 `evals/golden.yaml`。改路由或语料时同步改它，并跑 `uv run pytest`。
 - 用户可见的 CLI 文案用中文。代码标识符用英文。
 - 会话默认写在 `KNOWHOW_SESSIONS_DIR`（默认 `.knowhow/sessions/`）。多轮把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给 decide/respond。
-- 长期记忆默认落在 `KNOWHOW_MEMORY_PATH`（`.knowhow/memory.sqlite`）。开跑前只把 **active** 记忆 Top-K 注入 decide/respond；自动抽取先写入 **pending**，满足「请记住」/重复 ≥`KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）/侧栏「确认记住」后晋升为 active。切换或新建会话时会 consolidate 一次。只存原子事实，不把整段聊天当记忆，也不写入 `data/corpus`。
+- 长期记忆默认落在 `KNOWHOW_MEMORY_PATH`（`.knowhow/memory.sqlite`）。开跑前只把 **active** 记忆 Top-K 注入 decide/respond；每轮对话结束后抽取，先写入 **pending**（「请记住」当轮同步写 active）。重复 ≥`KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）或侧栏「确认记住」后晋升为 active。抽取对照已有相似记忆做 add / update / delete / noop：改口覆盖同一行并保留 status，用户说忘掉、不要记住或别记了则删除匹配行。召回时写 `last_recalled_at`，相关度接近时近期用过的靠前；不自动删除长期未用的 active。切换或新建会话不 consolidate、不调模型。`KNOWHOW_MEMORY_CONSOLIDATE_ON_SWITCH` 默认关闭，只控制是否允许直接调用 `POST /api/memories/consolidate`。只存原子事实，不把整段聊天当记忆，也不写入 `data/corpus`。
 - 改 UI：在 `frontend/` 用 `pnpm`；生产构建进 `src/knowhow/web/static/`，由 `knowhow serve` 在 `/` 提供。

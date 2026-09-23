@@ -40,7 +40,7 @@ data/corpus/         离线资料（含 agent-*.md 工程提纲）
 evals/golden.yaml
 ```
 
-从仓库根目录执行命令。`knowhow serve` 在 `http://127.0.0.1:8765` 同时提供 API 与 UI（需先 `pnpm --dir frontend build`）。开发时可用 Vite：`pnpm --dir frontend dev`（代理 `/api` → `:8765`）。回答通过 SSE 逐段推到页面。左侧会话列表与全文消息落在 `.knowhow/sessions/`（可用 `KNOWHOW_SESSIONS_DIR` 改路径），进程重启后仍可切换；标题默认截取首条用户消息。多轮追问会把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给路由和回答。长期记忆默认写在 `.knowhow/memory.sqlite`（`KNOWHOW_MEMORY_PATH`）：自动抽取进 **pending**，说「请记住：…」、同一事实重复达到 `KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）、或侧栏点「确认记住」后升为 **active**（仅 active 参与回答召回）；切换/新建会话会 consolidate。侧栏可列表/删除/确认；记忆不进 `data/corpus`。
+从仓库根目录执行命令。`knowhow serve` 在 `http://127.0.0.1:8765` 同时提供 API 与 UI（需先 `pnpm --dir frontend build`）。开发时可用 Vite：`pnpm --dir frontend dev`（代理 `/api` → `:8765`）。回答通过 SSE 逐段推到页面。左侧会话列表与全文消息落在 `.knowhow/sessions/`（可用 `KNOWHOW_SESSIONS_DIR` 改路径），进程重启后仍可切换；标题默认截取首条用户消息。多轮追问会把最近 `KNOWHOW_HISTORY_TURNS`（默认 12）条消息交给路由和回答。长期记忆默认写在 `.knowhow/memory.sqlite`（`KNOWHOW_MEMORY_PATH`）：每轮对话结束后自动抽取进 **pending**（live 会调模型），说「请记住：…」当轮同步写入 **active**，同一事实重复达到 `KNOWHOW_MEMORY_PROMOTE_HITS`（默认 2）或侧栏点「确认记住」后升为 **active**（仅 active 参与回答召回）。抽取会对照已有记忆：改口覆盖同一条并保留状态，说「忘掉 / 不要记住 / 别记了」则删掉最相似的一条，重复和闲聊不另起一条。召回时记下使用时间，相关度接近时最近用过的靠前；不会因为长期没用就自动删掉 active 记忆。点侧栏切换或新建会话不再整理、不再调模型。`KNOWHOW_MEMORY_CONSOLIDATE_ON_SWITCH` 默认关闭；只有显式打开时，直接调用 `POST /api/memories/consolidate` 才会再跑一遍抽取。侧栏可列表/删除/确认；记忆不进 `data/corpus`。
 
 ## 命令
 
