@@ -49,10 +49,9 @@ def learn_agent_text(topic: str = "") -> str:
                 "MCP 时改走 `config/mcp.yaml`）。",
                 "Skills：`skills/*/SKILL.md`；选中后才把 body 交给回答"
                 "（`skills.py` + Decision.guidance）。",
-                "offline：`ScriptedDecider` 先匹配工具名，"
-                "再匹配 skill triggers，再检索语料。",
-                "本 skill 的工具名就是 `learn_agent`；"
-                "live 时模型还能看到技能目录。",
+                "offline / live 都先走 `match_known_tool_or_skill`："
+                "工具名 → skill triggers；未命中才检索或问模型。"
+                "本 skill 的工具名就是 `learn_agent`。",
             ]
         )
     if any(key in folded for key in ("eval", "评测", "langfuse", "观测", "trace")):

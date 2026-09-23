@@ -9,6 +9,7 @@ export interface SessionMessage {
   sources?: string[]
   tool_name?: string
   trace_id?: string | null
+  dissection?: TurnDissection | null
 }
 
 export interface SessionSummary {
@@ -73,6 +74,7 @@ export type StreamEvent =
       tool_name?: string
       trace_id?: string | null
       answer?: string
+      dissection?: TurnDissection | null
     }
   | {
       type: 'session'
@@ -93,4 +95,68 @@ export interface TranscriptMessage {
   trace_id?: string | null
   pending?: boolean
   feedback?: number
+  dissection?: TurnDissection | null
+}
+
+export interface LabPredicate {
+  type: 'memory_active_contains' | 'memory_pending_contains' | 'memory_any_contains'
+  needle: string
+}
+
+export interface LabStep {
+  id: string
+  label: string
+  hint: string
+  predicate: LabPredicate
+}
+
+export interface LabSpec {
+  id: string
+  title: string
+  steps: LabStep[]
+}
+
+export interface HistoryLine {
+  role: string
+  chars: number
+  preview: string
+}
+
+export interface TurnDissection {
+  route: {
+    action: Action
+    tool_name: string
+    sources: string[]
+    query: string
+  }
+  why: { reason: string; detail: string }
+  injected: {
+    history_turns: number
+    memories: string[]
+    guidance_present: boolean
+  }
+  tool_output_summary: string
+  trace_id: string | null
+  tracing: boolean
+  langfuse_hint: string | null
+  user_visible: { question: string; answer_snippet: string }
+  model_visible: {
+    system_kind: 'answer' | 'coach'
+    guidance_present: boolean
+    guidance_preview: string
+    history_turns: number
+    history: HistoryLine[]
+    memories: string[]
+    context_previews: string[]
+    sources: string[]
+    tool_output_preview: string
+    query: string
+  }
+  lab: LabSpec | null
+  default_open: boolean
+}
+
+export interface LabStatus {
+  lab: LabSpec
+  checks: Record<string, boolean>
 }

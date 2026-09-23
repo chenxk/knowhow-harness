@@ -76,45 +76,36 @@ class ScriptedDecider:
         memories: Sequence[str] = (),
     ) -> Decision:
         probe = _followup_probe(question, history)
-        folded = probe.lower()
-        for name in self._catalog.names():
-            if name in question or name in probe:
-                topic = probe.replace(name, "").strip(" :：") or probe
-                args = {"topic": topic} if name in {"lookup_note", "learn_agent"} else {}
-                return Decision(
-                    action="tool",
-                    query=topic,
-                    tool_name=name,
-                    tool_args=args,
-                    guidance=guidance_for(name, self._skills),
-                )
-        for skill in self._skills:
-            if any(trigger.lower() in folded for trigger in skill.triggers):
-                return Decision(
-                    action="tool",
-                    query=probe,
-                    tool_name=skill.tool,
-                    tool_args={"topic": probe},
-                    guidance=skill.body,
-                )
+        forced = match_known_tool_or_skill(
+            question,
+            probe,
+            catalog_names=self._catalog.names(),
+            skills=self._skills,
+        )
+        if forced is not None:
+            return forced
         # Explicit 「请记住」 is a write path, not a corpus lookup — otherwise
         # agent-memory primers steal the turn via lexical overlap.
         from knowhow.memory import explicit_remember
 
         if explicit_remember(question) is not None or explicit_remember(probe) is not None:
-            return Decision(action="answer", query=probe)
+            return Decision(action="answer", query=probe, route_reason="scripted_remember")
         # Recalled personal facts beat corpus retrieval so offline answers
         # do not bury memory under an unrelated RAG hit.
         if memories:
-            return Decision(action="answer", query=probe)
+            return Decision(action="answer", query=probe, route_reason="scripted_memory")
         hits = self._store.search(probe, k=1)
         if hits and hits[0].score >= self._threshold:
-            return Decision(action="retrieve", query=probe)
-        return Decision(action="answer", query=probe)
+            return Decision(
+                action="retrieve",
+                query=probe,
+                route_reason="scripted_retrieve",
+            )
+        return Decision(action="answer", query=probe, route_reason="scripted_fallback")
 
 
 class ModelDecider:
-    """Ask the chat model for a JSON decision. Invalid JSON becomes `answer`."""
+    """Live router: known tool/skill triggers win; otherwise ask the model."""
 
     def __init__(self, chat: Chat, catalog: ToolCatalog, skills: list[Skill]) -> None:
         self._chat = chat
@@ -128,6 +119,15 @@ class ModelDecider:
         history: Sequence[ChatMessage] = (),
         memories: Sequence[str] = (),
     ) -> Decision:
+        probe = _followup_probe(question, history)
+        forced = match_known_tool_or_skill(
+            question,
+            probe,
+            catalog_names=self._catalog.names(),
+            skills=self._skills,
+        )
+        if forced is not None:
+            return forced
         tools = ", ".join(self._catalog.names()) or "(none)"
         skills = _skill_catalog(self._skills)
         message = await self._chat.ainvoke(
@@ -142,7 +142,49 @@ class ModelDecider:
             tool_names=set(self._catalog.names()),
         )
         decision.guidance = guidance_for(decision.tool_name, self._skills)
+        if decision.route_reason == "unknown":
+            decision.route_reason = "model"
         return decision
+
+
+def match_known_tool_or_skill(
+    question: str,
+    probe: str,
+    *,
+    catalog_names: Sequence[str],
+    skills: list[Skill],
+) -> Decision | None:
+    """Deterministic tool/skill match shared by offline and live routers.
+
+    Known catalog names and skill triggers override free-form model routing so
+    product coaching (e.g. learn_agent) stays reliable in live mode.
+    """
+    folded = probe.lower()
+    for name in catalog_names:
+        if name in question or name in probe:
+            topic = probe.replace(name, "").strip(" :：") or probe
+            args = {"topic": topic} if name in {"lookup_note", "learn_agent"} else {}
+            return Decision(
+                action="tool",
+                query=topic,
+                tool_name=name,
+                tool_args=args,
+                guidance=guidance_for(name, skills),
+                route_reason="tool_name",
+            )
+    for skill in skills:
+        if skill.tool not in catalog_names:
+            continue
+        if any(trigger.lower() in folded for trigger in skill.triggers):
+            return Decision(
+                action="tool",
+                query=probe,
+                tool_name=skill.tool,
+                tool_args={"topic": probe},
+                guidance=skill.body,
+                route_reason="skill_trigger",
+            )
+    return None
 
 
 def parse_decision(text: str, *, question: str, tool_names: set[str]) -> Decision:
@@ -151,23 +193,29 @@ def parse_decision(text: str, *, question: str, tool_names: set[str]) -> Decisio
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return Decision(action="answer", query=question)
+        return Decision(action="answer", query=question, route_reason="model")
     if not isinstance(data, dict):
-        return Decision(action="answer", query=question)
+        return Decision(action="answer", query=question, route_reason="model")
     action = data.get("action", "answer")
     if action not in ("retrieve", "tool", "answer"):
-        return Decision(action="answer", query=question)
+        return Decision(action="answer", query=question, route_reason="model")
     query = str(data.get("query") or question)
     tool_name = str(data.get("tool_name") or "")
     tool_args = _string_args(data.get("tool_args"))
     if action == "tool":
         if tool_name not in tool_names:
-            return Decision(action="answer", query=question)
+            return Decision(action="answer", query=question, route_reason="model")
         tool_args.setdefault("topic", query)
     else:
         tool_name = ""
         tool_args = {}
-    return Decision(action=action, query=query, tool_name=tool_name, tool_args=tool_args)
+    return Decision(
+        action=action,
+        query=query,
+        tool_name=tool_name,
+        tool_args=tool_args,
+        route_reason="model",
+    )
 
 
 def _string_args(value: object) -> dict[str, str]:

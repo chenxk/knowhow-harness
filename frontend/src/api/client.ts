@@ -1,5 +1,6 @@
 import type {
   EvalResult,
+  LabStatus,
   MemoryItem,
   Meta,
   Session,
@@ -57,6 +58,10 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export async function listMemories(): Promise<MemoryItem[]> {
   return readJson(await fetch('/api/memories'))
+}
+
+export async function fetchLab(labId: string): Promise<LabStatus> {
+  return readJson(await fetch(`/api/labs/${encodeURIComponent(labId)}`))
 }
 
 export async function promoteMemory(memoryId: string): Promise<MemoryItem> {

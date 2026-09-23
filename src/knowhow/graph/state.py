@@ -7,7 +7,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-from knowhow.types import Action
+from knowhow.types import Action, RouteReason
 
 
 class GraphState(TypedDict):
@@ -21,6 +21,7 @@ class GraphState(TypedDict):
     tool_output: str
     guidance: str
     memories: list[str]
+    route_reason: RouteReason
 
 
 Branch = Literal["retrieve", "act", "respond"]

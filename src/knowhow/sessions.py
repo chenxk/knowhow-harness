@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from knowhow.dissection import TurnDissection
 from knowhow.types import Action, ChatMessage
 
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -26,6 +27,7 @@ class SessionMessage(BaseModel):
     sources: list[str] = Field(default_factory=list)
     tool_name: str = ""
     trace_id: str | None = None
+    dissection: TurnDissection | None = None
 
 
 class SessionSummary(BaseModel):
@@ -141,6 +143,7 @@ class JsonSessionStore:
         sources: list[str],
         tool_name: str,
         trace_id: str | None,
+        dissection: TurnDissection | None = None,
     ) -> Session | None:
         """Append a user/assistant pair and auto-title on the first user turn."""
         session = self.get(session_id)
@@ -157,6 +160,7 @@ class JsonSessionStore:
                 sources=list(sources),
                 tool_name=tool_name,
                 trace_id=trace_id,
+                dissection=dissection,
             )
         )
         session.updated_at = _now()

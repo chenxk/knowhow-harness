@@ -69,6 +69,7 @@ export function useWorkspace(onMemoriesMaybeChanged?: () => void) {
         sources: item.sources,
         tool_name: item.tool_name,
         trace_id: item.trace_id,
+        dissection: item.dissection ?? null,
       })),
     )
   }, [])
@@ -175,6 +176,8 @@ export function useWorkspace(onMemoriesMaybeChanged?: () => void) {
                   tool_name: event.tool_name ?? item.tool_name,
                   pending: event.type !== 'done',
                   trace_id: event.type === 'done' ? event.trace_id : item.trace_id,
+                  dissection:
+                    event.type === 'done' ? (event.dissection ?? null) : item.dissection,
                   content:
                     event.type === 'done' && event.answer ? event.answer : item.content,
                 }

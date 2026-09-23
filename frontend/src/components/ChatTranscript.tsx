@@ -3,6 +3,7 @@ import { postScore } from '../api/client'
 import type { TranscriptMessage } from '../api/types'
 import { ACTION_LABEL } from '../lib/format'
 import { CopyButton } from './CopyButton'
+import { DissectionDrawer } from './DissectionDrawer'
 import { Markdown } from './Markdown'
 
 const SAMPLE_LEARN = '教我长期记忆怎么工作'
@@ -10,12 +11,14 @@ const SAMPLE_LEARN = '教我长期记忆怎么工作'
 export function ChatTranscript({
   messages,
   tracing,
+  labRefreshKey,
   onFeedback,
   onError,
   onSample,
 }: {
   messages: TranscriptMessage[]
   tracing: boolean
+  labRefreshKey: string
   onFeedback: (id: string, value: number) => void
   onError: (message: string) => void
   onSample?: (text: string) => void
@@ -60,6 +63,7 @@ export function ChatTranscript({
             key={message.id}
             message={message}
             tracing={tracing}
+            labRefreshKey={labRefreshKey}
             onFeedback={onFeedback}
             onError={onError}
           />
@@ -72,11 +76,13 @@ export function ChatTranscript({
 function AssistantTurn({
   message,
   tracing,
+  labRefreshKey,
   onFeedback,
   onError,
 }: {
   message: TranscriptMessage
   tracing: boolean
+  labRefreshKey: string
   onFeedback: (id: string, value: number) => void
   onError: (message: string) => void
 }) {
@@ -160,6 +166,9 @@ function AssistantTurn({
           )}
         </div>
       )}
+      {message.dissection && !message.pending ? (
+        <DissectionDrawer dissection={message.dissection} refreshKey={labRefreshKey} />
+      ) : null}
     </article>
   )
 }

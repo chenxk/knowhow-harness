@@ -130,6 +130,7 @@ export default function App() {
             <ChatTranscript
               messages={workspace.messages}
               tracing={Boolean(meta?.tracing)}
+              labRefreshKey={memories.map((item) => `${item.id}:${item.status}`).join('|')}
               onFeedback={workspace.setFeedback}
               onError={workspace.setError}
               onSample={(text) => void handleSend(text)}

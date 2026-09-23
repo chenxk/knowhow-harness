@@ -14,7 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
+from knowhow.dissection import TurnDissection
 from knowhow.evals.runner import LangfuseScoreSink, NullScoreSink, load_golden, run_eval
+from knowhow.labs import check_lab, lab_by_id
 from knowhow.memory import MemoryItem, SqliteMemoryStore
 from knowhow.runtime import Runtime, build_runtime
 from knowhow.sessions import (
@@ -156,6 +158,20 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="会话不存在")
         return session.messages
 
+    @app.get("/api/labs/{lab_id}")
+    async def get_lab(lab_id: str) -> dict[str, object]:
+        """Return a lab spec plus live pass/fail for each step."""
+        spec = lab_by_id(lab_id)
+        if spec is None:
+            raise HTTPException(status_code=404, detail="实验不存在")
+        current: Runtime = app.state.runtime
+        rows = current.memory.list()
+        checks = check_lab(spec, rows)
+        return {
+            "lab": spec.model_dump(mode="json"),
+            "checks": checks,
+        }
+
     @app.get("/api/memories", response_model=list[MemoryItem])
     async def list_memories() -> list[MemoryItem]:
         current: Runtime = app.state.runtime
@@ -219,6 +235,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 done_sources: list[str] = []
                 done_tool = ""
                 done_trace: str | None = None
+                done_dissection: TurnDissection | None = None
                 try:
                     async for event in current.stream(
                         question,
@@ -237,6 +254,11 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                             done_sources = list(event.sources)
                             done_tool = event.tool_name
                             done_trace = event.trace_id
+                            raw = event.dissection
+                            if isinstance(raw, TurnDissection):
+                                done_dissection = raw
+                            elif isinstance(raw, dict):
+                                done_dissection = TurnDissection.model_validate(raw)
                     if done_answer:
                         store.append_turn(
                             session_id,
@@ -246,6 +268,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                             sources=done_sources,
                             tool_name=done_tool,
                             trace_id=done_trace,
+                            dissection=done_dissection,
                         )
                         refreshed = store.get(session_id)
                         if refreshed is not None:

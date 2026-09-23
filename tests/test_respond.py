@@ -103,6 +103,56 @@ async def test_model_responder_emits_thinking_from_raw_deltas() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_model_responder_uses_coach_system_when_guidance_present() -> None:
+    captured: list[object] = []
+
+    class _Stream:
+        def __aiter__(self) -> AsyncIterator[object]:
+            async def _gen() -> AsyncIterator[object]:
+                yield SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                reasoning_content=None,
+                                content="课 1",
+                                model_extra={},
+                            )
+                        )
+                    ]
+                )
+
+            return _gen()
+
+    class _Completions:
+        async def create(self, **kwargs: object) -> _Stream:
+            captured.append(kwargs["messages"])
+            return _Stream()
+
+    chat = SimpleNamespace(
+        async_client=SimpleNamespace(create=_Completions().create),
+        model_name="fake-reasoner",
+        temperature=0,
+        astream=None,
+    )
+    parts = [
+        part
+        async for part in ModelResponder(chat).astream(  # type: ignore[arg-type]
+            question="教我长期记忆怎么工作",
+            query="教我长期记忆怎么工作",
+            context=[],
+            sources=[],
+            tool_output="【课 1 · 长期记忆】pending→active",
+            guidance="只依据本仓库 memory.py 讲解",
+        )
+    ]
+    assert "".join(part.text for part in parts) == "课 1"
+    assert captured
+    system = captured[0][0]["content"]
+    assert "本仓库" in system
+    assert "心理学" in system
+
+
 def test_delta_reasoning_reads_model_extra() -> None:
     delta = SimpleNamespace(
         reasoning_content=None,

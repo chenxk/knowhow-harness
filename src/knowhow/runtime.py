@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
 from knowhow.config import Settings
+from knowhow.dissection import build_dissection
 from knowhow.graph.builder import build_graph
 from knowhow.graph.state import GraphState
 from knowhow.memory import (
@@ -106,6 +107,7 @@ class Runtime:
             sources=tuple(done.sources),
             tool_name=done.tool_name,
             trace_id=done.trace_id,
+            dissection=done.dissection,
         )
 
     async def stream(
@@ -162,19 +164,32 @@ class Runtime:
         remembered = explicit_remember(question)
         if remembered is not None:
             self._write_explicit(remembered, session_id=thread_id, user_id=user_id)
+        prior = history or []
+        if self.settings.history_turns > 0:
+            prior = prior[-self.settings.history_turns :]
+        trace_id = self.tracer.trace_id(callbacks)
+        dissection = build_dissection(
+            question=question,
+            answer=answer,
+            values=values,
+            history_limit=self.settings.history_turns,
+            memories=memories,
+            route_reason=str(values.get("route_reason") or "unknown"),
+            trace_id=trace_id,
+            tracing=self.tracer.enabled,
+            langfuse_host=self.settings.langfuse_host if self.tracer.enabled else "",
+        )
         yield StreamEvent(
             type="done",
             action=_as_action(values.get("action"), action),
             sources=list(values.get("sources") or sources),
             tool_name=str(values.get("tool_name") or tool_name),
-            trace_id=self.tracer.trace_id(callbacks),
+            trace_id=trace_id,
             answer=answer,
+            dissection=dissection,
         )
         if remembered is not None:
             return
-        prior = history or []
-        if self.settings.history_turns > 0:
-            prior = prior[-self.settings.history_turns :]
         turns = [*prior, ChatMessage(role="user", content=question)]
         if answer:
             turns.append(ChatMessage(role="assistant", content=answer))
@@ -458,6 +473,7 @@ def _initial_state(question: str, *, memories: list[str]) -> GraphState:
         "tool_output": "",
         "guidance": "",
         "memories": memories,
+        "route_reason": "unknown",
     }
 
 
@@ -485,6 +501,7 @@ def _seeded_state(
         "tool_output": "",
         "guidance": "",
         "memories": memories,
+        "route_reason": "unknown",
     }
 
 

@@ -25,7 +25,7 @@ triggers:
 三课大纲（按需选一课深入，不要一次灌完）：
 1. **长期记忆**：`memory.py` pending→active；显式「请记住」/重复晋升/侧栏确认；与 RAG、会话 JSON 分离。
 2. **上下文 / 会话**：`sessions.py` 持久化 + `KNOWHOW_HISTORY_TURNS` 注入 decide/respond；checkpoint 进程内。
-3. **工具与 Skills**：`tools/catalog.py` + `skills/*/SKILL.md`；offline ScriptedDecider 的 trigger / retrieve 顺序。
+3. **工具与 Skills**：`tools/catalog.py` + `skills/*/SKILL.md`；offline/live 都先 `match_known_tool_or_skill`（工具名 / triggers），再检索或问模型。
 
 实验（课 1，优先引导）：
 1. 说「请记住：我喜欢喝绿茶」→ 侧栏应出现 **active**。

@@ -7,6 +7,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 Action = Literal["retrieve", "tool", "answer"]
+RouteReason = Literal[
+    "skill_trigger",
+    "tool_name",
+    "model",
+    "scripted_retrieve",
+    "scripted_memory",
+    "scripted_remember",
+    "scripted_fallback",
+    "unknown",
+]
 
 
 class Decision(BaseModel):
@@ -17,6 +27,7 @@ class Decision(BaseModel):
     tool_name: str = ""
     tool_args: dict[str, str] = Field(default_factory=dict)
     guidance: str = ""
+    route_reason: RouteReason = "unknown"
 
 
 class ChatMessage(BaseModel):
@@ -43,6 +54,8 @@ class StreamEvent(BaseModel):
     tool_name: str = ""
     trace_id: str | None = None
     answer: str = ""
+    # Knowhow TurnDissection (knowhow.dissection); kept as Any to avoid import cycles.
+    dissection: Any | None = None
 
 
 class RunResult(BaseModel):
@@ -53,6 +66,7 @@ class RunResult(BaseModel):
     sources: tuple[str, ...] = ()
     tool_name: str = ""
     trace_id: str | None = None
+    dissection: Any | None = None
 
 
 def message_text(content: str | list[str | dict[str, Any]]) -> str:

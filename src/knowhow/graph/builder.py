@@ -38,6 +38,7 @@ def build_graph(
             "tool_name": decision.tool_name,
             "tool_args": decision.tool_args,
             "guidance": decision.guidance,
+            "route_reason": decision.route_reason,
         }
 
     async def retrieve(state: GraphState) -> dict[str, object]:

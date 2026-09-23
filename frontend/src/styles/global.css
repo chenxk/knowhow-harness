@@ -534,6 +534,166 @@ button {
   line-height: 1.55;
 }
 
+.dissection {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.dissection summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  user-select: none;
+}
+
+.dissection summary::-webkit-details-marker {
+  display: none;
+}
+
+.dissection summary::before {
+  content: '▸ ';
+  color: var(--accent);
+}
+
+.dissection[open] summary::before {
+  content: '▾ ';
+}
+
+.dissection-body {
+  padding: 0 10px 10px;
+}
+
+.dissection-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dissection-tabs button[role='tab'] {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.dissection-tabs button[role='tab'].on {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dissection-field {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.dissection-field span {
+  display: inline-block;
+  min-width: 4.5em;
+  margin-right: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.dissection-list {
+  margin: 0 0 8px;
+  padding-left: 1.2em;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dissection a {
+  color: var(--accent);
+}
+
+.contrast {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.contrast h3,
+.lab-head h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lab-panel {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.lab-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.lab-score {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.lab-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lab-steps li {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.lab-steps p {
+  margin: 0;
+}
+
+.lab-mark {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.lab-steps li.pass .lab-mark {
+  color: var(--retrieve);
+}
+
+.lab-steps li.fail .lab-mark {
+  color: var(--danger);
+}
+
+.lab-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .contrast {
+    grid-template-columns: 1fr;
+  }
+}
+
 @keyframes pulse {
   0%,
   100% {

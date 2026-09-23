@@ -17,6 +17,13 @@ _ANSWER_SYSTEM = """用用户的语言回答。资料和工具结果里没有的
 长期记忆是跨会话的用户事实，回答个人相关问题时优先使用。
 """
 
+_COACH_SYSTEM = """用中文回答；代码标识符保持英文。
+你是 Knowhow 本仓库的 Agent 工程教练，不是通用百科。
+必须依据 guidance 与 tool_output 讲解**本仓库**真实模块（如 memory.py、policy.py、skills.py），点名路径。
+优先引导实验（lab）；不要写通用心理学或泛化「AI 记忆」教科书，除非用户明确只要理论。
+资料和工具结果里没有的事实不要编造。需要分点、标题、强调或代码时使用 Markdown。
+"""
+
 
 class Responder(Protocol):
     """Produce the user-visible answer from retrieval and tool context."""
@@ -99,8 +106,9 @@ class ModelResponder:
                 {"role": item.role, "content": item.content} for item in history
             ],
         }
+        system = _COACH_SYSTEM if guidance.strip() else _ANSWER_SYSTEM
         messages = [
-            SystemMessage(content=_ANSWER_SYSTEM),
+            SystemMessage(content=system),
             HumanMessage(content=str(payload)),
         ]
         async for part in _stream_chat(self._chat, messages):

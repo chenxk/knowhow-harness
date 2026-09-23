@@ -1,6 +1,6 @@
 # Knowhow Harness
 
-个人可用的本地 Agent，也是学习 Agent 工程（上下文、记忆、工具/Skills、eval、观测）的工作台：日常聊天是默认；想学时通过 Skill 进入学习模式。
+个人可用的本地 Agent，也是学习 Agent 工程（上下文、记忆、工具/Skills、eval、观测）的工作台，定位为：可自述的 Agent 工程工作台：日常聊天是默认；想学时通过 Skill 进入学习模式。
 
 单用户、本机优先。不是多租户 SaaS，也没有鉴权与队列。默认 `KNOWHOW_MODE=offline`：不调用模型，进程内词法检索，工具是本地静态目录。`live` 才接 OpenAI 兼容模型和可选的 MCP 进程。
 
