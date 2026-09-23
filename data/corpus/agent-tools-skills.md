@@ -1,6 +1,6 @@
 # Agent 工程：工具与 Skills
 
-工具目录在 `src/knowhow/tools/catalog.py`。默认 offline 提供 `current_time`、`lookup_note`、`learn_agent`；`KNOWHOW_MCP_ENABLED=true` 时改为 `config/mcp.yaml` 里的 MCP 进程（如 `servers/notes_mcp.py`）。
+工具目录在 `src/knowhow/tools/catalog.py`。内置 `current_time`、`lookup_note`、`learn_agent` 始终可用。聊天页设置里添加的 MCP 写在 `.knowhow/mcp.json`，启用后追加进目录；与内置重名时加服务名前缀。`KNOWHOW_MCP_ENABLED=true` 时还会合并 `config/mcp.yaml`。
 
 Skills 在仓库 `skills/*/SKILL.md`：frontmatter 声明 name / description / tool / triggers；正文只在选中后作为 `Decision.guidance` 交给回答（`skills.py`）。
 

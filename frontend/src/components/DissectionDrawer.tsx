@@ -84,6 +84,8 @@ export function DissectionDrawer({
                     在 Langfuse 打开
                   </a>
                 </>
+              ) : dissection.tracing && dissection.trace_id ? (
+                ' · 需配置 LANGFUSE_PROJECT_ID'
               ) : dissection.tracing ? null : (
                 ' · 未开启 tracing'
               )}

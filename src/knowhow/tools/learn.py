@@ -45,8 +45,8 @@ def learn_agent_text(topic: str = "") -> str:
         return "\n".join(
             [
                 "【课 3 · 工具与 Skills】",
-                "工具：`tools/catalog.py`（offline 静态；"
-                "MCP 时改走 `config/mcp.yaml`）。",
+                "工具：`tools/catalog.py`（内置静态工具始终在；"
+                "设置里的 MCP 写在 `.knowhow/mcp.json`，启用后追加）。",
                 "Skills：`skills/*/SKILL.md`；选中后才把 body 交给回答"
                 "（`skills.py` + Decision.guidance）。",
                 "offline / live 都先走 `match_known_tool_or_skill`："

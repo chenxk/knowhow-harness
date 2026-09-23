@@ -56,6 +56,35 @@ def test_build_dissection_redacts_tool_output() -> None:
     assert view.user_visible.question == "lookup_note 密钥"
 
 
+def test_langfuse_hint_searches_project_traces() -> None:
+    encoded = build_dissection(
+        question="q",
+        answer="a",
+        values={"action": "answer", "messages": []},
+        history_limit=0,
+        memories=[],
+        trace_id="trace id/1",
+        tracing=True,
+        langfuse_host="https://langfuse.example",
+        langfuse_project_id="proj",
+    )
+    assert encoded.langfuse_hint == (
+        "https://langfuse.example/project/proj/traces?search=trace%20id%2F1"
+    )
+    missing = build_dissection(
+        question="q",
+        answer="a",
+        values={"action": "answer", "messages": []},
+        history_limit=0,
+        memories=[],
+        trace_id="trace id/1",
+        tracing=True,
+        langfuse_host="https://langfuse.example",
+    )
+    assert missing.langfuse_hint is None
+    assert missing.trace_id == "trace id/1"
+
+
 def test_memory_lab_predicates() -> None:
     lab = lab_by_id("memory_promote")
     assert lab is not None

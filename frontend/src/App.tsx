@@ -10,6 +10,7 @@ import type { MemoryItem, Meta } from './api/types'
 import { ChatTranscript } from './components/ChatTranscript'
 import { Composer } from './components/Composer'
 import { MetaBar } from './components/MetaBar'
+import { SettingsPanel } from './components/SettingsPanel'
 import { Sidebar } from './components/Sidebar'
 import { useWorkspace } from './hooks/useWorkspace'
 
@@ -17,6 +18,7 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [memories, setMemories] = useState<MemoryItem[]>([])
   const [evalText, setEvalText] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const refreshMemories = useCallback(async () => {
@@ -123,6 +125,7 @@ export default function App() {
           onDeleteMemory={(id) => void handleDeleteMemory(id)}
           onPromoteMemory={(id) => void handlePromoteMemory(id)}
           onEval={() => void handleEval()}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
         <section className="desk">
@@ -140,6 +143,16 @@ export default function App() {
           <Composer busy={workspace.busy} onSend={(text) => void handleSend(text)} />
         </section>
       </div>
+      {settingsOpen ? (
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          onChanged={() => {
+            void fetchMeta()
+              .then(setMeta)
+              .catch(() => undefined)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

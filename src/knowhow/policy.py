@@ -160,7 +160,8 @@ def match_known_tool_or_skill(
     product coaching (e.g. learn_agent) stays reliable in live mode.
     """
     folded = probe.lower()
-    for name in catalog_names:
+    # Longer names win so a prefixed MCP tool is not swallowed by a builtin substring.
+    for name in sorted(catalog_names, key=len, reverse=True):
         if name in question or name in probe:
             topic = probe.replace(name, "").strip(" :：") or probe
             args = {"topic": topic} if name in {"lookup_note", "learn_agent"} else {}

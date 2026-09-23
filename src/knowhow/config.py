@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     )
     mcp_enabled: bool = False
     mcp_config: Path = Path("config/mcp.yaml")
+    mcp_store: Path = Path(".knowhow/mcp.json")
     corpus_dir: Path = Path("data/corpus")
     skills_dir: Path = Path("skills")
     golden_path: Path = Path("evals/golden.yaml")
@@ -70,6 +71,10 @@ class Settings(BaseSettings):
         default="https://cloud.langfuse.com",
         validation_alias=AliasChoices("LANGFUSE_HOST", "KNOWHOW_LANGFUSE_HOST"),
     )
+    langfuse_project_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("LANGFUSE_PROJECT_ID", "KNOWHOW_LANGFUSE_PROJECT_ID"),
+    )
 
     @property
     def tracing_enabled(self) -> bool:
@@ -86,6 +91,10 @@ class Settings(BaseSettings):
     @property
     def mcp_path(self) -> Path:
         return _resolve(self.mcp_config)
+
+    @property
+    def mcp_store_path(self) -> Path:
+        return _resolve(self.mcp_store)
 
     @property
     def golden_file(self) -> Path:

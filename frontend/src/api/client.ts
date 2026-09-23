@@ -1,6 +1,8 @@
 import type {
   EvalResult,
   LabStatus,
+  McpList,
+  McpTransport,
   MemoryItem,
   Meta,
   Session,
@@ -84,6 +86,41 @@ export async function postScore(traceId: string, value: number, comment: string)
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trace_id: traceId, value, comment }),
+    }),
+  )
+}
+
+export async function listMcp(): Promise<McpList> {
+  return readJson(await fetch('/api/mcp'))
+}
+
+export async function saveMcp(server: {
+  name: string
+  enabled: boolean
+  transport: McpTransport
+  command: string
+  args: string[]
+  url: string
+}): Promise<McpList> {
+  return readJson(
+    await fetch('/api/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(server),
+    }),
+  )
+}
+
+export async function deleteMcp(name: string): Promise<McpList> {
+  return readJson(await fetch(`/api/mcp/${encodeURIComponent(name)}`, { method: 'DELETE' }))
+}
+
+export async function setMcpEnabled(name: string, enabled: boolean): Promise<McpList> {
+  return readJson(
+    await fetch(`/api/mcp/${encodeURIComponent(name)}/enabled`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
     }),
   )
 }

@@ -7,6 +7,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -25,6 +26,14 @@ from knowhow.sessions import (
     SessionMessage,
     SessionSummary,
     is_session_id,
+)
+from knowhow.tools.catalog import HybridToolCatalog
+from knowhow.tools.mcp_config import (
+    McpServer,
+    delete_server,
+    load_user_servers,
+    set_server_enabled,
+    upsert_server,
 )
 from knowhow.types import Action
 
@@ -86,6 +95,37 @@ class ScoreOut(BaseModel):
     name: str
     value: float
     trace_id: str
+
+
+class McpServerIn(BaseModel):
+    name: str = Field(max_length=64)
+    enabled: bool = True
+    transport: Literal["stdio", "http", "sse"] = "stdio"
+    command: str = Field(default="", max_length=500)
+    args: list[str] = Field(default_factory=list, max_length=32)
+    url: str = Field(default="", max_length=2000)
+
+
+class McpEnabledIn(BaseModel):
+    enabled: bool
+
+
+class McpServerOut(BaseModel):
+    name: str
+    enabled: bool
+    transport: Literal["stdio", "http", "sse"]
+    command: str
+    args: list[str]
+    url: str
+    connected: bool
+    tool_count: int
+    tools: list[str]
+    error: str
+
+
+class McpListOut(BaseModel):
+    servers: list[McpServerOut]
+    config_error: str = ""
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
@@ -336,6 +376,54 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             trace_id=body.trace_id.strip(),
         )
 
+    @app.get("/api/mcp", response_model=McpListOut)
+    async def list_mcp() -> McpListOut:
+        current: Runtime = app.state.runtime
+        return _mcp_list(current)
+
+    @app.post("/api/mcp", response_model=McpListOut)
+    async def save_mcp(body: McpServerIn) -> McpListOut:
+        current: Runtime = app.state.runtime
+        server = McpServer(
+            name=body.name.strip(),
+            enabled=body.enabled,
+            transport=body.transport,
+            command=body.command.strip(),
+            args=[item.strip() for item in body.args if item.strip()],
+            url=body.url.strip(),
+        )
+        async with app.state.lock:
+            try:
+                upsert_server(current.settings.mcp_store_path, server)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            await current.reload_mcp()
+        return _mcp_list(current)
+
+    @app.delete("/api/mcp/{name}", response_model=McpListOut)
+    async def remove_mcp(name: str) -> McpListOut:
+        current: Runtime = app.state.runtime
+        async with app.state.lock:
+            try:
+                delete_server(current.settings.mcp_store_path, name)
+            except ValueError as exc:
+                status = 404 if str(exc) == "服务不存在" else 400
+                raise HTTPException(status_code=status, detail=str(exc)) from exc
+            await current.reload_mcp()
+        return _mcp_list(current)
+
+    @app.post("/api/mcp/{name}/enabled", response_model=McpListOut)
+    async def enable_mcp(name: str, body: McpEnabledIn) -> McpListOut:
+        current: Runtime = app.state.runtime
+        async with app.state.lock:
+            try:
+                set_server_enabled(current.settings.mcp_store_path, name, body.enabled)
+            except ValueError as exc:
+                status = 404 if str(exc) == "服务不存在" else 400
+                raise HTTPException(status_code=status, detail=str(exc)) from exc
+            await current.reload_mcp()
+        return _mcp_list(current)
+
     if spa.is_file():
         assets = _STATIC / "assets"
         if assets.is_dir():
@@ -368,3 +456,33 @@ def _check_session(session_id: str) -> str:
     if not is_session_id(session_id):
         raise HTTPException(status_code=400, detail="会话 id 只能包含字母、数字、下划线和连字符")
     return session_id
+
+
+def _mcp_list(current: Runtime) -> McpListOut:
+    servers, error = load_user_servers(current.settings.mcp_store_path)
+    status = _mcp_status(current)
+    rows: list[McpServerOut] = []
+    for server in servers:
+        item = status.get(server.name)
+        rows.append(
+            McpServerOut(
+                name=server.name,
+                enabled=server.enabled,
+                transport=server.transport,
+                command=server.command,
+                args=list(server.args),
+                url=server.url,
+                connected=bool(item and item.connected),
+                tool_count=item.tool_count if item else 0,
+                tools=list(item.tools) if item else [],
+                error=item.error if item else "",
+            )
+        )
+    return McpListOut(servers=rows, config_error=error or current.mcp_config_error)
+
+
+def _mcp_status(current: Runtime) -> dict[str, object]:
+    catalog = current.catalog
+    if not isinstance(catalog, HybridToolCatalog):
+        return {}
+    return {item.name: item for item in catalog.mcp_status()}

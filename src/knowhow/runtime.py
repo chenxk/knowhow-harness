@@ -29,7 +29,13 @@ from knowhow.rag.ingest import ingest_dir
 from knowhow.rag.store import InMemoryStore
 from knowhow.respond import ModelResponder, OfflineResponder
 from knowhow.skills import load_skills
-from knowhow.tools.catalog import McpToolCatalog, StaticToolCatalog, ToolCatalog
+from knowhow.tools.catalog import HybridToolCatalog, McpClientFactory, ToolCatalog, load_mcp_servers
+from knowhow.tools.mcp_config import (
+    McpServer,
+    load_user_servers,
+    merge_servers,
+    server_from_mapping,
+)
 from knowhow.types import Action, ChatMessage, RunResult, StreamEvent, message_text
 
 _LOG = logging.getLogger(__name__)
@@ -83,6 +89,7 @@ class Runtime:
         skill_names: list[str],
         corpus_chunks: int,
         chat: object | None = None,
+        mcp_config_error: str = "",
     ) -> None:
         self.settings = settings
         self.graph = graph
@@ -92,8 +99,18 @@ class Runtime:
         self.catalog = catalog
         self.skill_names = skill_names
         self.corpus_chunks = corpus_chunks
+        self.mcp_config_error = mcp_config_error
         self._chat = chat
         self._extract_tasks: set[asyncio.Task[None]] = set()
+
+    async def reload_mcp(self) -> None:
+        """Reread MCP config and reconnect. Failures stay on server status."""
+        catalog = self.catalog
+        if not isinstance(catalog, HybridToolCatalog):
+            return
+        servers, error = _mcp_servers(self.settings)
+        self.mcp_config_error = error
+        await catalog.reload_mcp(servers)
 
     async def run(self, question: str, *, thread_id: str) -> RunResult:
         """Run one question on a checkpoint thread."""
@@ -180,6 +197,9 @@ class Runtime:
             trace_id=trace_id,
             tracing=self.tracer.enabled,
             langfuse_host=self.settings.langfuse_host if self.tracer.enabled else "",
+            langfuse_project_id=(
+                self.settings.langfuse_project_id if self.tracer.enabled else ""
+            ),
         )
         yield StreamEvent(
             type="done",
@@ -418,18 +438,20 @@ class Runtime:
         return _seeded_state(prior, question, memories=memories)
 
 
-async def build_runtime(settings: Settings | None = None) -> Runtime:
+async def build_runtime(
+    settings: Settings | None = None,
+    *,
+    mcp_client_factory: McpClientFactory | None = None,
+) -> Runtime:
     """Check settings, index the corpus, and compile the graph."""
     resolved = settings or Settings()
     resolved.check()
     store = InMemoryStore()
     corpus_chunks = ingest_dir(store, resolved.corpus_path)
-    catalog: ToolCatalog
-    if resolved.mcp_enabled:
-        catalog = McpToolCatalog(resolved.mcp_path)
-    else:
-        catalog = StaticToolCatalog()
+    catalog = HybridToolCatalog(client_factory=mcp_client_factory)
     await catalog.setup()
+    mcp_servers, mcp_error = _mcp_servers(resolved)
+    await catalog.reload_mcp(mcp_servers)
     skills = load_skills(resolved.skills_path)
     missing = [skill.tool for skill in skills if skill.tool not in catalog.names()]
     if missing:
@@ -472,7 +494,22 @@ async def build_runtime(settings: Settings | None = None) -> Runtime:
         skill_names=[skill.name for skill in skills],
         corpus_chunks=corpus_chunks,
         chat=chat,
+        mcp_config_error=mcp_error,
     )
+
+
+def _mcp_servers(settings: Settings) -> tuple[list[McpServer], str]:
+    """User servers, plus yaml servers when the env switch is on."""
+    user, error = load_user_servers(settings.mcp_store_path)
+    if not settings.mcp_enabled:
+        return user, error
+    extra: list[McpServer] = []
+    for name, spec in load_mcp_servers(settings.mcp_path).items():
+        try:
+            extra.append(server_from_mapping(name, spec))
+        except RuntimeError:
+            _LOG.warning("skip MCP server %s (unsupported transport)", name)
+    return merge_servers(extra, user), error
 
 
 def _run_config(thread_id: str, callbacks: list[object]) -> dict[str, object]:

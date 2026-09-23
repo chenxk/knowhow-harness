@@ -58,6 +58,26 @@ export interface EvalRow {
   failures: string[]
 }
 
+export type McpTransport = 'stdio' | 'http' | 'sse'
+
+export interface McpServer {
+  name: string
+  enabled: boolean
+  transport: McpTransport
+  command: string
+  args: string[]
+  url: string
+  connected: boolean
+  tool_count: number
+  tools: string[]
+  error: string
+}
+
+export interface McpList {
+  servers: McpServer[]
+  config_error: string
+}
+
 export interface EvalResult {
   passed: number
   failed: number

@@ -73,9 +73,9 @@ set OPENAI_BASE_URL=https://api.deepseek.com
 set KNOWHOW_CHAT_MODEL=deepseek-chat
 ```
 
-`KNOWHOW_MCP_ENABLED=true` 时，工具改为拉起 `config/mcp.yaml` 里的 stdio 服务，而不是内置静态工具。
+聊天页左侧栏左下角「设置」可以添加 MCP 服务，配置写在 `.knowhow/mcp.json`（已 gitignore）。支持 stdio（命令和参数）以及 URL（streamable HTTP 或 SSE）。保存后下一轮对话就能调用；停用的服务不注册工具；连不上时错误显示在设置里，内置工具仍可用。和内置工具重名时会加上服务名前缀。`KNOWHOW_MCP_ENABLED=true` 仍会额外合并 `config/mcp.yaml`。
 
-`LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback；`LANGFUSE_HOST` 指向你的 Langfuse 实例（自建或 cloud）。Eval 给有 trace id 的用例写 boolean score `case_pass`。UI 在回答下方提供「有用 / 没用」，写入 `user_feedback` score。
+`LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 都有值时，每次 `run` / `eval` 附带 Langfuse callback；`LANGFUSE_HOST` 指向你的 Langfuse 实例（自建或 cloud）。`LANGFUSE_PROJECT_ID` 有值时，解剖抽屉的「在 Langfuse 打开」指向该项目的 traces 搜索；缺省则不生成链接。Eval 给有 trace id 的用例写 boolean score `case_pass`。UI 在回答下方提供「有用 / 没用」，写入 `user_feedback` score。
 
 ## 边界
 

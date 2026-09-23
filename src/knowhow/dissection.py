@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 
@@ -113,6 +114,16 @@ def truncate(text: str, limit: int = _PREVIEW) -> str:
     return cleaned[: limit - 1] + "…"
 
 
+def _langfuse_traces_url(host: str, project_id: str, trace_id: str) -> str | None:
+    """Project traces search URL. Missing host or project id yields no link."""
+    base = host.strip().rstrip("/")
+    project = project_id.strip()
+    trace = trace_id.strip()
+    if not base or not project or not trace:
+        return None
+    return f"{base}/project/{quote(project, safe='')}/traces?search={quote(trace, safe='')}"
+
+
 def build_dissection(
     *,
     question: str,
@@ -124,6 +135,7 @@ def build_dissection(
     trace_id: str | None,
     tracing: bool,
     langfuse_host: str = "",
+    langfuse_project_id: str = "",
 ) -> TurnDissection:
     """Assemble dissection from graph checkpoint values and run metadata."""
     action = _as_action(values.get("action"))
@@ -154,9 +166,8 @@ def build_dissection(
         query=truncate(query, 200),
     )
     hint = None
-    if tracing and trace_id and langfuse_host.strip():
-        host = langfuse_host.rstrip("/")
-        hint = f"{host}/trace/{trace_id}"
+    if tracing and trace_id:
+        hint = _langfuse_traces_url(langfuse_host, langfuse_project_id, trace_id)
 
     return TurnDissection(
         route=RouteView(

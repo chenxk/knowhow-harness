@@ -28,6 +28,7 @@ export function Sidebar({
   onDeleteMemory,
   onPromoteMemory,
   onEval,
+  onOpenSettings,
 }: {
   sessions: SessionSummary[]
   sessionId: string
@@ -40,6 +41,7 @@ export function Sidebar({
   onDeleteMemory: (id: string) => void
   onPromoteMemory: (id: string) => void
   onEval: () => void
+  onOpenSettings: () => void
 }) {
   const [showAllSessions, setShowAllSessions] = useState(false)
   const rows = visibleSessions(sessions, sessionId, showAllSessions)
@@ -49,6 +51,7 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-scroll">
       <div className="sidebar-head">
         <button type="button" className="primary" onClick={onNew}>
           新对话
@@ -134,6 +137,12 @@ export function Sidebar({
       </div>
 
       {evalText ? <pre className="eval-box">{evalText}</pre> : null}
+      </div>
+      <div className="sidebar-foot">
+        <button type="button" className="ghost settings-entry" onClick={onOpenSettings}>
+          设置
+        </button>
+      </div>
     </aside>
   )
 }

@@ -1,5 +1,5 @@
-"""Tool catalogs. Offline uses a static stand-in; live MCP replaces it."""
+"""Tool catalogs. Builtin tools stay; enabled MCP servers add theirs."""
 
-from knowhow.tools.catalog import McpToolCatalog, StaticToolCatalog, ToolCatalog
+from knowhow.tools.catalog import HybridToolCatalog, McpToolCatalog, StaticToolCatalog, ToolCatalog
 
-__all__ = ["McpToolCatalog", "StaticToolCatalog", "ToolCatalog"]
+__all__ = ["HybridToolCatalog", "McpToolCatalog", "StaticToolCatalog", "ToolCatalog"]

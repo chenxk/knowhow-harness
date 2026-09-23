@@ -12,7 +12,7 @@ Knowhow Harness：个人可用的本地 Agent Runtime，兼作学习 Agent 工�
 | `respond.py` | 最终回答 |
 | `rag/` | 语料切块和 `VectorStore` |
 | `memory.py` | 跨会话原子事实记忆（SQLite）。与 checkpoint / RAG 语料分离 |
-| `tools/` | `ToolCatalog`。默认静态目录；`KNOWHOW_MCP_ENABLED=true` 时改走 MCP |
+| `tools/` | `ToolCatalog`。内置静态工具始终注册；`.knowhow/mcp.json` 里启用的服务追加 MCP 工具。`KNOWHOW_MCP_ENABLED=true` 时再合并 `config/mcp.yaml` |
 | `skills.py` | 读取仓库 `skills/*/SKILL.md`。选中后才把正文交给回答 |
 | `evals/` | 只消费 `Runtime.run` 的结果，不把规则写进图节点 |
 | `observe/` | Langfuse callback 与 score 写入。两个密钥都缺省时不创建 client |
