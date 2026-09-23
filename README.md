@@ -81,3 +81,11 @@ set KNOWHOW_CHAT_MODEL=deepseek-chat
 ## 边界
 
 检索是进程内词法相似度，存储接口在 `VectorStore`。LangGraph checkpoint 仍用内存，进程退出即丢；会话消息另有 JSON 持久化，冷启动会回填最近对话再跑图。跨会话事实记忆在独立 SQLite，与 RAG 语料分离。Eval 核对动作、来源、工具名和可选答案片段，还没有 RAGAS。没有鉴权、队列和多租户。
+
+## 许可证
+
+[MIT](LICENSE)。
+
+## 参与贡献
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。

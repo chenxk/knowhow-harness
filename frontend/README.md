@@ -25,4 +25,4 @@ Vite proxies `/api` → `http://127.0.0.1:8765`. Open the printed local URL (def
 pnpm build
 ```
 
-Writes to `src/knowhow/web/static/`. `knowhow serve` serves that SPA at `/` when `static/index.html` exists; otherwise it falls back to the legacy `web/index.html`.
+Writes to `src/knowhow/web/static/`. `knowhow serve` serves that SPA at `/`. If `static/index.html` is missing, `/` returns a plain message to run `pnpm --dir frontend build`.

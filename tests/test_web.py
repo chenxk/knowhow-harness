@@ -26,13 +26,31 @@ def client(tmp_path: Path):
         yield test_client
 
 
-def test_index_serves_ui(client: TestClient) -> None:
+def test_index_serves_spa(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    text = response.text
-    # Built SPA, or legacy monolithic index.html when static/ is absent.
-    assert ("Knowhow" in text) or ("工作台" in text)
-    assert ("新对话" in text) or ("root" in text)
+    assert "Knowhow" in response.text
+    assert 'id="root"' in response.text
+
+
+def test_index_without_build_asks_to_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("knowhow.web.app._STATIC", tmp_path / "missing-static")
+    settings = Settings(
+        _env_file=None,
+        mode="offline",
+        sessions_dir=tmp_path / "sessions",
+        memory_path=tmp_path / "memory.sqlite",
+    )
+    runtime = asyncio.run(build_runtime(settings))
+    app = create_app(runtime)
+    with TestClient(app) as bare:
+        response = bare.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "pnpm --dir frontend build" in response.text
 
 
 def test_meta_reports_offline_runtime(client: TestClient) -> None:

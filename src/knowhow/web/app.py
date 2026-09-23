@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
@@ -28,8 +28,8 @@ from knowhow.sessions import (
 )
 from knowhow.types import Action
 
-_PAGE = Path(__file__).with_name("index.html")
 _STATIC = Path(__file__).with_name("static")
+_MISSING_UI = "前端尚未构建。请运行：pnpm --dir frontend build\n"
 _SESSION = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MEMORY = re.compile(r"^m[A-Za-z0-9]{1,32}$")
 
@@ -89,7 +89,7 @@ class ScoreOut(BaseModel):
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
-    """Serve the SPA (or legacy index.html) and /api. Reuse a passed-in runtime when given."""
+    """Serve the built SPA and /api. Reuse a passed-in runtime when given."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -352,9 +352,9 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 return FileResponse(favicon_path)
     else:
 
-        @app.get("/", response_class=HTMLResponse)
+        @app.get("/", response_class=PlainTextResponse)
         def index() -> str:
-            return _PAGE.read_text(encoding="utf-8")
+            return _MISSING_UI
 
     return app
 

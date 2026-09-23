@@ -1,4 +1,4 @@
-"""Test bench HTTP app."""
+"""HTTP app: FastAPI /api and the built SPA."""
 
 from knowhow.web.app import create_app
 

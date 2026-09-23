@@ -16,7 +16,7 @@ Knowhow Harness：个人可用的本地 Agent Runtime，兼作学习 Agent 工�
 | `skills.py` | 读取仓库 `skills/*/SKILL.md`。选中后才把正文交给回答 |
 | `evals/` | 只消费 `Runtime.run` 的结果，不把规则写进图节点 |
 | `observe/` | Langfuse callback 与 score 写入。两个密钥都缺省时不创建 client |
-| `web/` | FastAPI：`/api/*` + 生产态挂载 `web/static` SPA；无 `static/` 时回退 `index.html`。SSE 含 `thinking`（推理增量）与 `delta`（正文） |
+| `web/` | FastAPI：`/api/*` + 生产态挂载 `web/static` SPA。没有构建产物时 `/` 返回纯文本，提示运行 `pnpm --dir frontend build`。SSE 含 `thinking`（推理增量）与 `delta`（正文） |
 | `sessions.py` | 会话列表与消息 JSON 持久化、自动标题 |
 | `servers/` | 独立 MCP 进程，不 import `knowhow` |
 | `frontend/` | Vite + React SPA（主 UI）。`pnpm dev` 代理 `/api`；`pnpm build` 输出到 `web/static` |

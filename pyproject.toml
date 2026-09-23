@@ -37,7 +37,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-knowhow = ["py.typed", "web/index.html", "web/static/**"]
+knowhow = ["py.typed", "web/static/**"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
